@@ -8,15 +8,16 @@ Guia detalhado de Git pra este projeto. Resume o fluxo, convenção de commits, 
 
 ## 1. Modelo de branches
 
-Este projeto usa **single-branch** (`main` como fonte de verdade) + branches temporárias por trabalho. Vercel faz auto-deploy de `main` pra produção e gera preview por PR.
+Este projeto usa **duas branches permanentes** (`main` e `dev`) + branches temporárias por trabalho. **Apenas `main` e `dev` deployam na Vercel** — branches temporárias não geram preview.
 
-### Branch permanente
+### Branches permanentes
 
 | Branch | Papel | Deploy |
 |--------|-------|--------|
-| `main` | Produção — código estável. Nunca commitar direto. | Production (URL fixa na Vercel) |
+| `main` | Produção — código estável e testado. Nunca commitar direto. | Production (URL fixa) |
+| `dev` | Staging — integração contínua de features. Nunca commitar direto. | Preview com URL fixa por branch |
 
-### Branches temporárias (partem de `main`)
+### Branches temporárias (partem de `dev`)
 
 | Prefixo | Quando usar | Exemplo |
 |---------|-------------|---------|
@@ -25,16 +26,16 @@ Este projeto usa **single-branch** (`main` como fonte de verdade) + branches tem
 | `refactor/` | Refatoração sem mudança de comportamento | `refactor/auth-split` |
 | `chore/` | Deps, config, CI, scripts | `chore/update-drizzle` |
 | `docs/` | Apenas documentação | `docs/contributing-update` |
-| `hotfix/` | Correção urgente em produção | `hotfix/login-crash` |
+| `hotfix/` | Correção urgente em produção | `hotfix/login-crash` (única que parte de `main`) |
 
 ### Regras absolutas
 
-- **Nunca commitar direto em `main`** — sempre via Pull Request
-- **Nunca force-push em `main`**
+- **Nunca commitar direto em `main` ou `dev`** — sempre via Pull Request
+- **Nunca force-push em `main` ou `dev`**
+- **Branches temporárias partem de `dev`** (exceto `hotfix/*` que parte de `main`)
+- **Branches temporárias não deployam na Vercel** — só após merge em `dev` ou `main` é que o deploy roda
 - Branch names em inglês, kebab-case, máximo ~4 palavras
-- Após merge, a branch temporária é deletada (squash merge faz isso automaticamente no GitHub)
-
-> Projetos maiores costumam adicionar uma branch `dev` (staging). Aqui não precisa porque a Vercel já dá preview por PR (URL única por commit) e a base de contribuidores é pequena.
+- Após merge, a branch temporária é deletada (squash merge faz isso automaticamente)
 
 ---
 
@@ -88,9 +89,9 @@ test(transactions): add E2E for bulk save flow
 ### Feature / fix
 
 ```bash
-# 1. Partir de main atualizado
-git checkout main
-git pull origin main
+# 1. Partir de dev atualizado
+git checkout dev
+git pull origin dev
 
 # 2. Criar branch
 git checkout -b feat/nome-da-feature
@@ -99,9 +100,9 @@ git checkout -b feat/nome-da-feature
 git add src/arquivo-modificado.ts
 git commit -m "feat(scope): description"
 
-# 4. Publicar e abrir PR
+# 4. Publicar e abrir PR contra dev
 git push -u origin feat/nome-da-feature
-gh pr create --base main --title "feat: ..." --body "..."
+gh pr create --base dev --title "feat: ..." --body "..."
 
 # 5. Após aprovação e CI verde: squash merge via GitHub/CLI
 gh pr merge <número> --squash --delete-branch
@@ -119,20 +120,36 @@ pnpm exec playwright test
 
 Todos precisam passar. O CI no GitHub Actions vai rodar `lint + typecheck + build` automaticamente.
 
+### Promoção `dev` → `main` (release)
+
+Quando `dev` estiver estável e pronto pra produção, abra um PR `dev` → `main`. Use **merge commit** (não squash) pra preservar histórico de commits que vieram do `dev`:
+
+```bash
+gh pr create --base main --head dev --title "release: promote dev to main"
+# Após review:
+gh pr merge <número> --merge --delete-branch=false
+```
+
+`dev` continua existindo após o merge (não deletar).
+
 ### Hotfix (urgência em produção)
 
 ```bash
-# Mesmo fluxo de feature, mas a branch parte de main e o título do PR
-# deixa claro que é hotfix
+# Único caso em que branch parte de main, não dev
 git checkout main && git pull origin main
 git checkout -b hotfix/descricao-do-problema
 
-# Corrige e abre PR
+# Corrige e abre PR contra main
 git commit -m "fix(scope): critical fix description"
 gh pr create --base main --title "hotfix: ..."
 
 # Squash merge depois do review
 gh pr merge <número> --squash --delete-branch
+
+# Sincronizar dev com a correção
+git checkout dev && git pull origin dev
+git merge main
+git push origin dev
 ```
 
 ---
@@ -141,9 +158,9 @@ gh pr merge <número> --squash --delete-branch
 
 | Origem → Destino | Estratégia | Motivo |
 |-------|-----------|--------|
-| `feat/*` → `main` | **Squash merge** | Histórico de `main` fica linear e legível; um squash = uma feature |
-| `fix/*` → `main` | **Squash merge** | Idem |
-| `hotfix/*` → `main` | **Squash merge** | Idem |
+| `feat/*` `fix/*` `chore/*` `docs/*` `refactor/*` → `dev` | **Squash merge** | Histórico de `dev` fica linear; um squash = uma feature |
+| `dev` → `main` (release) | **Merge commit** | Preserva rastreabilidade — `main` reflete quais features foram promovidas em cada release |
+| `hotfix/*` → `main` | **Squash merge** | Correção pontual e urgente, sem WIP a preservar |
 
 Squash merge no GitHub também deleta a branch automaticamente após o merge.
 
@@ -186,7 +203,8 @@ Use o [template padrão](../.github/PULL_REQUEST_TEMPLATE.md). Resumo:
 
 ### Checklist antes de abrir PR
 
-- [ ] Branch parte de `main` atualizado
+- [ ] Branch parte de `dev` atualizado (ou `main` se for `hotfix/*`)
+- [ ] PR tem como **base** `dev` (ou `main` se for `hotfix/*` ou release)
 - [ ] Commits seguem Conventional Commits
 - [ ] Nenhum arquivo sensível commitado (`.env`, secrets, `.mcp.json` local)
 - [ ] `pnpm lint && pnpm typecheck && pnpm build` passam
@@ -198,11 +216,14 @@ Use o [template padrão](../.github/PULL_REQUEST_TEMPLATE.md). Resumo:
 ## 7. Comandos de referência rápida
 
 ```bash
-# Ver log compacto da branch atual vs main
-git log --oneline feat/minha-feature ^main
+# Ver log compacto da branch atual vs dev
+git log --oneline feat/minha-feature ^dev
 
-# Ver diferença entre branch e main
-git diff main..feat/minha-feature --stat
+# Ver diferença entre branch e dev
+git diff dev..feat/minha-feature --stat
+
+# Ver diferença entre dev e main (o que ainda não está em prod)
+git diff main..dev --stat
 
 # Listar todas as tags ordenadas
 git tag -l --sort=-v:refname | head -10
@@ -210,7 +231,8 @@ git tag -l --sort=-v:refname | head -10
 # Desfazer último commit (mantendo as mudanças)
 git reset HEAD~1 --soft
 
-# Criar tag anotada e publicar
+# Criar tag anotada e publicar (sempre em main)
+git checkout main && git pull origin main
 git tag -a v0.2.0 -m "v0.2.0 — descrição"
 git push origin v0.2.0
 
@@ -224,8 +246,11 @@ gh pr list
 # Ver status de um PR
 gh pr view <número>
 
-# Squash merge e delete branch
+# Squash merge e delete branch (feat/fix/chore → dev)
 gh pr merge <número> --squash --delete-branch
+
+# Merge commit (dev → main em release)
+gh pr merge <número> --merge --delete-branch=false
 ```
 
 ---
@@ -234,8 +259,12 @@ gh pr merge <número> --squash --delete-branch
 
 | Situação | Errado | Certo |
 |----------|--------|-------|
-| Commitar em `main` | `git commit` direto | Sempre via PR |
-| Force-push em branch compartilhada | `git push --force` | Nunca em `main`; usar `--force-with-lease` em branches pessoais se realmente precisar |
+| Commitar em `main` ou `dev` | `git commit` direto | Sempre via PR |
+| Abrir PR contra `main` em vez de `dev` | `gh pr create --base main` (exceto hotfix/release) | `gh pr create --base dev` pra feat/fix/chore/docs/refactor |
+| Branch partir de `main` em vez de `dev` | `git checkout main && git checkout -b feat/x` | `git checkout dev && git checkout -b feat/x` (hotfix é exceção) |
+| Force-push em branch compartilhada | `git push --force` | Nunca em `main` ou `dev`; usar `--force-with-lease` em branches pessoais se realmente precisar |
+| Squash merge em `dev` → `main` | Perde rastreabilidade do que foi promovido | Usar `--merge` (merge commit) pra release |
+| Esquecer de sincronizar `dev` após hotfix | `dev` fica desatualizado | `git checkout dev && git merge main && git push` após hotfix |
 | Misturar `feat` + `fix` num commit | Commit gigante | Commits atômicos, um por mudança lógica |
 | Commitar `.env` | `git add .` sem verificar | Usar `.gitignore` + revisar `git status` antes |
 | Commitar `.mcp.json` | Esquecer que tem o `project_ref` pessoal | Sempre usar `.mcp.example.json`; o real fica gitignored |

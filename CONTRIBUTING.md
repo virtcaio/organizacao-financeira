@@ -131,8 +131,12 @@ Este projeto usa shadcn/ui com **Base UI** (não Radix). Diferenças importantes
 
 ### Branches
 
-- Crie a partir de `main`: `git checkout -b feat/nome-curto` ou `fix/nome-curto`
+- **`main`** = produção (deploy automático na Vercel)
+- **`dev`** = staging (deploy automático com URL fixa)
+- Crie sua branch a partir de **`dev`**: `git checkout dev && git pull && git checkout -b feat/nome-curto`
+- Hotfix urgente em produção é a única exceção: parte de `main`
 - Mantenha o branch pequeno e focado em uma coisa
+- **Branches temporárias não geram deploy na Vercel** — só `main` e `dev` deployam
 
 ### Commits
 
@@ -168,12 +172,12 @@ pnpm exec playwright test
 ### Abrir o PR
 
 1. Push do seu branch
-2. Abra o PR contra `main`
+2. Abra o PR contra **`dev`** (ou contra `main` se for hotfix)
 3. Preencha o template (descrição, test plan, screenshots se aplicável, issue relacionada)
 4. CI vai rodar `lint + typecheck + build` automaticamente
 5. Aguarde review
 
-PRs são geralmente fechados com **squash merge** pra manter o histórico de `main` linear.
+PRs são fechados com **squash merge** em `dev` (histórico linear) ou **merge commit** quando promovendo `dev` → `main` (preserva rastreabilidade da release).
 
 Mais detalhes (SemVer, hotfix, comandos rápidos, armadilhas comuns) em [`docs/GIT-WORKFLOW-BEST-PRACTICES.md`](./docs/GIT-WORKFLOW-BEST-PRACTICES.md).
 
