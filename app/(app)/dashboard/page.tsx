@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { KpiCards } from "@/components/dashboard/kpi-cards";
 import { CategoryBreakdown } from "@/components/dashboard/category-breakdown";
 import { MonthlyEvolution } from "@/components/dashboard/monthly-evolution";
@@ -72,62 +73,38 @@ function FirstStepsEmpty({ firstName }: { firstName?: string }) {
         </p>
       </header>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Step
-          number={1}
-          title="Cadastre suas contas"
-          description="Conta corrente, poupança, cartão de crédito, carteira ou corretora. Cada uma com saldo inicial e moeda."
-          cta="Ir para Contas"
-          href="/contas"
-        />
-        <Step
-          number={2}
-          title="Lance suas primeiras transações"
-          description="Receitas e despesas. Use categorias hierárquicas pra organizar."
-          cta="Ir para Transações"
-          href="/transacoes"
-          disabled
-        />
-      </div>
-    </div>
-  );
-}
-
-function Step({
-  number,
-  title,
-  description,
-  cta,
-  href,
-  disabled,
-}: {
-  number: number;
-  title: string;
-  description: string;
-  cta: string;
-  href: string;
-  disabled?: boolean;
-}) {
-  return (
-    <div className="flex flex-col gap-3 rounded-lg border bg-card p-6">
-      <div className="flex size-7 items-center justify-center rounded-full border text-xs font-medium text-muted-foreground">
-        {number}
-      </div>
-      <div>
-        <h2 className="font-medium">{title}</h2>
-        <p className="mt-1 text-sm text-muted-foreground">{description}</p>
-      </div>
-      <div>
-        {disabled ? (
-          <span className={buttonVariants({ variant: "outline" }) + " pointer-events-none opacity-50"}>
-            {cta}
-          </span>
-        ) : (
-          <Link href={href} className={buttonVariants()}>
-            {cta}
-          </Link>
-        )}
-      </div>
+      <EmptyState
+        variant="onboarding"
+        steps={[
+          {
+            number: 1,
+            title: "Cadastre suas contas",
+            description:
+              "Conta corrente, poupança, cartão de crédito, carteira ou corretora. Cada uma com saldo inicial e moeda.",
+            action: (
+              <Link href="/contas" className={buttonVariants()}>
+                Ir para Contas
+              </Link>
+            ),
+          },
+          {
+            number: 2,
+            title: "Lance suas primeiras transações",
+            description:
+              "Receitas e despesas. Use categorias hierárquicas pra organizar.",
+            action: (
+              <span
+                className={
+                  buttonVariants({ variant: "outline" }) +
+                  " pointer-events-none opacity-50"
+                }
+              >
+                Ir para Transações
+              </span>
+            ),
+          },
+        ]}
+      />
     </div>
   );
 }

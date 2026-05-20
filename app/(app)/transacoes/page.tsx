@@ -9,6 +9,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { NewTransactionButton } from "@/components/transacoes/new-transaction-button";
 import { TransactionRowActions } from "@/components/transacoes/transaction-row-actions";
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   listTransactionsAction,
   listAccountsForPickerAction,
@@ -150,17 +151,16 @@ export default async function TransacoesPage() {
 
 function EmptyAccounts() {
   return (
-    <div className="rounded-lg border bg-card p-12 text-center">
-      <h2 className="font-medium">Cadastre uma conta primeiro</h2>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Você precisa ter ao menos uma conta para lançar transações.
-      </p>
-      <div className="mt-6 flex justify-center">
+    <EmptyState
+      variant="list"
+      title="Cadastre uma conta primeiro"
+      description="Você precisa ter ao menos uma conta para lançar transações."
+      action={
         <Link href="/contas" className={buttonVariants()}>
           Ir para Contas
         </Link>
-      </div>
-    </div>
+      }
+    />
   );
 }
 
@@ -172,14 +172,11 @@ function EmptyTransactions({
   categories: Awaited<ReturnType<typeof listCategoriesForUser>>;
 }) {
   return (
-    <div className="rounded-lg border bg-card p-12 text-center">
-      <h2 className="font-medium">Nenhuma transação registrada</h2>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Comece lançando sua primeira receita ou despesa.
-      </p>
-      <div className="mt-6 flex justify-center">
-        <NewTransactionButton accounts={accounts} categories={categories} />
-      </div>
-    </div>
+    <EmptyState
+      variant="list"
+      title="Nenhuma transação registrada"
+      description="Comece lançando sua primeira receita ou despesa."
+      action={<NewTransactionButton accounts={accounts} categories={categories} />}
+    />
   );
 }

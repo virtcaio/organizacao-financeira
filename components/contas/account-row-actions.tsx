@@ -44,7 +44,24 @@ export function AccountRowActions({ account }: Props) {
         toast.error(res.error);
         return;
       }
-      toast.success(account.archived ? "Conta restaurada" : "Conta arquivada");
+      if (account.archived) {
+        toast.success("Conta restaurada");
+      } else {
+        toast.message("Conta arquivada", {
+          action: {
+            label: "Desfazer",
+            onClick: async () => {
+              const undo = await unarchiveFinancialAccountAction(account.id);
+              if (undo.ok) {
+                toast.success("Conta restaurada");
+                router.refresh();
+              } else {
+                toast.error(undo.error);
+              }
+            },
+          },
+        });
+      }
       router.refresh();
     });
   }
