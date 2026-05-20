@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel duplicated runs on the same branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: Lint · Typecheck · Build
+    runs-on: ubuntu-latest
+
+    # Dummy env vars — the build itself doesn't connect to DB; postgres-js only
+    # opens a real connection on the first query. These let `lib/db/index.ts`
+    # load without throwing on missing DATABASE_URL.
+    env:
+      DATABASE_URL: postgresql://dummy:dummy@localhost:5432/dummy?sslmode=disable
+      DIRECT_URL: postgresql://dummy:dummy@localhost:5432/dummy?sslmode=disable
+      NEXTAUTH_SECRET: dummy-secret-for-ci-only-must-be-32-bytes
+      NEXTAUTH_URL: http://localhost:3000
+      SUPABASE_URL: https://dummy.supabase.co
+      SUPABASE_SERVICE_ROLE_KEY: dummy
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Build
+        run: pnpm build

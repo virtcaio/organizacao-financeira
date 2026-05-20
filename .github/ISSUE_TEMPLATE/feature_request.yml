@@ -1,0 +1,50 @@
+name: ✨ Propor feature
+description: Sugira uma nova funcionalidade ou melhoria.
+title: "[feat] "
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Obrigado pela ideia! Pra mudanças grandes, considere abrir uma [Discussion](https://github.com/virtcaio/organizacao-financeira/discussions) primeiro pra alinhar.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problema que isso resolve
+      description: Qual dor do usuário essa feature atende?
+      placeholder: Eu lanço o salário todo mês manualmente e é repetitivo...
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposta
+      description: O que você imagina como solução? UI, fluxo, comportamento.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternativas consideradas
+      description: O que mais você pensou e descartou (e por quê)?
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Contexto adicional
+      description: Links, exemplos de outros apps, mockups, referências.
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Tamanho estimado
+      options:
+        - "Pequeno — UI ou ajuste"
+        - "Médio — feature isolada"
+        - "Grande — toca várias partes do app"
+        - "Não tenho ideia"
+    validations:
+      required: true

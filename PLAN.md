@@ -106,14 +106,20 @@ Mestre de fases e acompanhamento. Spec em [`PRD.md`](./PRD.md), convenções em 
 - [x] Queries agregadas em `lib/db/queries/dashboard.ts`: balances por moeda, KPIs mensais BRL, breakdown por categoria-pai, evolução mensal 6m, últimas N transações — todas em paralelo via `Promise.all`
 - [x] Componentes em `components/dashboard/`: `KpiCards` (4 cards), `CategoryBreakdown` (pizza + legenda com %), `MonthlyEvolution` (area chart), `RecentTransactions`
 - [x] Dashboard mostra estado vazio guiado (2 passos: cadastrar contas → lançar transações) quando ainda não tem conta
-- [x] Seed de 10 transações reais (maio + abril 2026) pro usuário `demo@example.com` pra demonstração
+- [x] Seed de 10 transações reais (maio + abril 2026) pro usuário demo pra demonstração
 - [x] Saldo consolidado por moeda · Receitas vs despesas do mês · Gráfico de gastos por categoria · Evolução mensal 6m · Estado vazio com CTAs
 
 **Pendente em V1 (decidido adiar pra finalizar V1.1 antes):**
 - [ ] V1c — Tags + transferências + filtros na listagem de transações
 - [ ] V1f — Orçamento mensal por categoria (limite, progresso, alerta 80%/100%)
 - [ ] V1g — Recorrências (regra + Vercel Cron) e "próximas contas a vencer" no dashboard
-- [ ] V1i — Deploy preview Vercel
+
+**V1i — Deploy Vercel ✅**
+- [x] Repositório privado em `github.com/virtcaio/organizacao-financeira`
+- [x] Projeto Vercel importado via dashboard, conectado ao repo (auto-deploy em push)
+- [x] Env vars de produção: `DATABASE_URL`, `DIRECT_URL`, `NEXTAUTH_SECRET`, `NEXTAUTH_URL`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` — Anthropic é BYOK (não vai no servidor)
+- [x] Mesma instância Supabase em prod e dev (decidido pra MVP); separar quando for SaaS multi-tenant
+- [x] **Fix de build:** `useSearchParams` em `LoginForm` envolto em `<Suspense>` (Next 16 exige em prerender)
 
 **Critério de aceite:** consigo lançar uma despesa manual, ver ela no dashboard, configurar orçamento mensal, criar uma recorrência (Netflix), ver ela aparecer no dia certo, e tudo isso rodando em `https://<preview>.vercel.app`.
 
@@ -145,7 +151,7 @@ Mestre de fases e acompanhamento. Spec em [`PRD.md`](./PRD.md), convenções em 
 - [x] Item "Importar" na sidebar (entre Transações e Orçamento)
 - [x] `proxy.ts` ajustado pra excluir `/api/*` do matcher (handlers fazem auth interna)
 - [x] Smoke test Playwright (`tests/smoke.spec.ts`) — cadastro → dashboard → guards → form BYOK → validação chave inválida → 401 nos endpoints sem auth. Passa em ~12s.
-- [x] **Validado em produção:** 8 transações importadas de PDF real (R$ 586,59) no usuário `demo@example.com`.
+- [x] **Validado em produção:** 8 transações importadas de PDF real (R$ 586,59) em ambiente do mantenedor.
 
 ### V1.1b — Resto da V1.1 (pendente)
 - [ ] Importação de CSV (parser por banco — começar pelo banco principal do usuário)
@@ -252,3 +258,4 @@ Adiado pra depois do MVP estabilizado:
 - **2026-05-19 noite — pivô BYOK:** SDK Anthropic 0.97+ não bundla no browser (importa `node:fs/promises` via agent-toolset). Mantive a UX BYOK (chave só no localStorage do client), mas a chamada ao Claude agora é feita por **route handler server-side** (`/api/ai/*`). A chave trafega no header `x-anthropic-key` por request, nunca é persistida no DB nem logada. Trade-off aceito: deixa de ser "puro BYOK client" mas resolve o bundling e mantém o modelo "custo do usuário".
 - **2026-05-19 noite — bulk via route handler:** Server Action de salvar em lote dava `Failed to fetch` no Next 16; migrei pra `/api/transactions/bulk`. Padrão a seguir pra novas operações: route handler > Server Action quando o body é grande ou a operação não é trivial.
 - **2026-05-19 noite — Playwright instalado:** `pnpm exec playwright test` cobre smoke do fluxo de cadastro + auth + guards de IA. Próximos testes adicionados conforme a feature.
+- **2026-05-19 noite — Deploy Vercel:** repo `virtcaio/organizacao-financeira` privado no GitHub, projeto importado na Vercel via dashboard, auto-deploy ativo. Build de produção exigiu Suspense em volta de `useSearchParams` (LoginForm) — fix commitado.

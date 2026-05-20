@@ -22,6 +22,7 @@
 
 # misc
 .DS_Store
+**/.DS_Store
 *.pem
 
 # debug
@@ -40,6 +41,9 @@ yarn-error.log*
 # playwright
 test-results/
 playwright-report/
+
+# MCP local config (use .mcp.example.json as template)
+.mcp.json
 
 # typescript
 *.tsbuildinfo

@@ -2,6 +2,29 @@
   "name": "organizacao-financeira",
   "version": "0.1.0",
   "private": true,
+  "description": "Gestor financeiro pessoal e familiar com IA — importa fatura PDF, categoriza com Claude, BYOK. Self-hosted via Next.js + Supabase + Vercel.",
+  "keywords": [
+    "finance",
+    "personal-finance",
+    "fintech",
+    "ai",
+    "anthropic",
+    "claude",
+    "nextjs",
+    "supabase",
+    "byok",
+    "brasil"
+  ],
+  "author": "Caio Oliveira (@virtcaio)",
+  "license": "AGPL-3.0-or-later",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/virtcaio/organizacao-financeira.git"
+  },
+  "homepage": "https://github.com/virtcaio/organizacao-financeira",
+  "bugs": {
+    "url": "https://github.com/virtcaio/organizacao-financeira/issues"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",

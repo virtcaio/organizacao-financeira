@@ -1,0 +1,72 @@
+name: 🐛 Reportar bug
+description: Encontrou algo que não funciona como deveria? Conte aqui.
+title: "[bug] "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Obrigado por ajudar a melhorar o projeto! Preencha o que conseguir.
+        Para vulnerabilidades de segurança, **não use este template** — veja [SECURITY.md](../blob/main/SECURITY.md).
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Descrição
+      description: O que está acontecendo? Seja o mais específico possível.
+      placeholder: Quando clico em "Salvar transações", aparece o erro "Failed to fetch"...
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Como reproduzir
+      description: Passos exatos pra reproduzir o bug.
+      placeholder: |
+        1. Vou em /importar
+        2. Subo uma fatura PDF
+        3. Aguardo a IA processar
+        4. Clico em "Salvar 8 transações"
+        5. Erro aparece
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Comportamento esperado
+      placeholder: As transações deveriam ser salvas e eu deveria ser redirecionado pra /transacoes.
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Ambiente
+      description: Cole `node --version`, `pnpm --version`, navegador, OS. Se for em produção, qual URL.
+      value: |
+        - Node:
+        - pnpm:
+        - Browser:
+        - OS:
+        - Ambiente (dev local / Vercel preview / Vercel prod):
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / Screenshots
+      description: Cole logs relevantes do console do navegador e/ou do `pnpm dev`. Print ajuda muito.
+      render: shell
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Antes de submeter
+      options:
+        - label: Procurei nas issues abertas e fechadas e não encontrei isso.
+          required: true
+        - label: Estou na versão mais recente de `main`.
+          required: false
