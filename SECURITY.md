@@ -6,7 +6,9 @@ Se você descobriu uma vulnerabilidade neste projeto, **por favor não abra uma 
 
 1. **GitHub Security Advisories** (recomendado): abra um relatório privado em
    [github.com/virtcaio/organizacao-financeira/security/advisories/new](https://github.com/virtcaio/organizacao-financeira/security/advisories/new).
-2. **Email**: como alternativa, envie um e-mail descrevendo o problema. Pegue o contato do mantenedor no perfil [@virtcaio](https://github.com/virtcaio).
+2. **Contato direto**: entre em contato com o mantenedor pelo perfil [@virtcaio](https://github.com/virtcaio).
+
+Ambos os canais permitem coordenar a correção sem expor o problema publicamente até que esteja resolvido.
 
 Tente incluir:
 

@@ -17,11 +17,7 @@ Um app web **self-hosted** para você (e sua família) controlar finanças pesso
 
 A killer feature é a **importação de fatura PDF**: você envia a fatura do cartão, o Claude lê o documento inteiro (vision nativo), categoriza cada transação usando suas categorias hierárquicas, e mostra uma tabela editável antes de salvar.
 
-## Demo
-
-O mantenedor mantém uma instância pessoal em **<https://organizacao-financeira-p7vt.vercel.app/>**.
-
-> ⚠️ Essa instância é a **conta pessoal** do mantenedor. Você não consegue usar pra valer ali — crie a sua hospedando o app você mesmo (instruções abaixo). É grátis (Supabase free tier + Vercel Hobby).
+O app foi pensado pra ser **self-hosted**: você cria seu próprio Supabase grátis, conecta sua chave Anthropic, e tem seu gestor financeiro pessoal rodando em poucos minutos. Veja [Como rodar localmente](#como-rodar-localmente) e [Deploy na Vercel](#deploy-na-vercel-self-hosting).
 
 ## Funcionalidades
 
@@ -121,4 +117,4 @@ A escolha por AGPL é coerente com a filosofia do projeto: **código aberto pra 
 
 ---
 
-Feito com 🇧🇷 por [@virtcaio](https://github.com/virtcaio) e contribuidores.
+Feito com 🇧🇷 por [Caio Oliveira (@virtcaio)](https://github.com/virtcaio) e contribuidores.

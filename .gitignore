@@ -45,6 +45,9 @@ playwright-report/
 # MCP local config (use .mcp.example.json as template)
 .mcp.json
 
+# Notas/rascunhos internos locais — não vão pro repo público
+docs/internos/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

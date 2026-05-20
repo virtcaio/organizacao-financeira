@@ -94,4 +94,4 @@ PRs welcome! See [`CONTRIBUTING.md`](./CONTRIBUTING.md). Issues tagged [`good fi
 
 ---
 
-Made with 🇧🇷 by [@virtcaio](https://github.com/virtcaio) and contributors.
+Made with 🇧🇷 by [Caio Oliveira (@virtcaio)](https://github.com/virtcaio) and contributors.

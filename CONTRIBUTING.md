@@ -175,6 +175,14 @@ pnpm exec playwright test
 
 PRs são geralmente fechados com **squash merge** pra manter o histórico de `main` linear.
 
+Mais detalhes (SemVer, hotfix, comandos rápidos, armadilhas comuns) em [`docs/GIT-WORKFLOW-BEST-PRACTICES.md`](./docs/GIT-WORKFLOW-BEST-PRACTICES.md).
+
+---
+
+## Documentação técnica
+
+Pra entender a organização interna de docs e onde colocar novos arquivos `.md`, veja [`docs/CONVENCOES.md`](./docs/CONVENCOES.md). Índice completo em [`docs/README.md`](./docs/README.md).
+
 ---
 
 ## Dúvidas?
