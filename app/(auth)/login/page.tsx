@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import {
   Card,
@@ -19,7 +20,9 @@ export default function LoginPage() {
         <CardDescription>Acesse sua conta para gerenciar suas finanças.</CardDescription>
       </CardHeader>
       <CardContent>
-        <LoginForm />
+        <Suspense fallback={<LoginFormSkeleton />}>
+          <LoginForm />
+        </Suspense>
       </CardContent>
       <CardFooter className="justify-center text-sm text-muted-foreground">
         Não tem conta?{" "}
@@ -28,5 +31,15 @@ export default function LoginPage() {
         </Link>
       </CardFooter>
     </Card>
+  );
+}
+
+function LoginFormSkeleton() {
+  return (
+    <div className="grid gap-4">
+      <div className="h-9 rounded-md bg-muted/50" />
+      <div className="h-9 rounded-md bg-muted/50" />
+      <div className="h-9 rounded-md bg-muted" />
+    </div>
   );
 }
