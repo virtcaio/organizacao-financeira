@@ -12,11 +12,17 @@ Para visão de produto e onboarding humano, ver [`README.md`](./README.md), [`PR
 
 Em particular:
 
-- **NUNCA commitar direto em `main`.** Todo trabalho começa criando uma branch temporária (`feat/`, `fix/`, `chore/`, `refactor/`, `docs/`, `hotfix/`) a partir de `main` atualizado e segue via Pull Request.
+- **Duas branches permanentes:** `main` (produção) e `dev` (staging). **Apenas elas deployam na Vercel** — branches temporárias não geram preview.
+- **NUNCA commitar direto em `main` ou `dev`.** Todo trabalho começa criando uma branch temporária a partir de **`dev` atualizado** (exceção: `hotfix/*` parte de `main`):
+  ```bash
+  git checkout dev && git pull origin dev
+  git checkout -b feat/nome-curto
+  ```
+- **PR vai contra `dev`** (`gh pr create --base dev`). Promoção `dev` → `main` é feita em PR separado com **merge commit** (não squash) preservando rastreabilidade.
 - **Commits seguem Conventional Commits** (`feat:`, `fix:`, `chore:`, `refactor:`, `docs:`, `test:`, `style:`, `perf:`, `ci:`). Um commit = uma mudança lógica.
 - **Antes de abrir PR**, rodar `pnpm lint && pnpm typecheck && pnpm build` (e `pnpm exec playwright test` se mudou UI/rotas/forms). O CI cobre esses três, mas é melhor pegar local.
-- **Squash merge** em `main`. CI precisa estar verde antes do merge.
-- **Nunca force-push em `main`.**
+- **Squash merge** pra branches temporárias → `dev`. **Merge commit** pra `dev` → `main`.
+- **Nunca force-push em `main` ou `dev`.**
 
 Antes de cada sessão de implementação, executar mentalmente o checklist da seção 3 do `docs/GIT-WORKFLOW-BEST-PRACTICES.md`. Se em dúvida sobre comando, branch ou merge strategy, consultar primeiro o doc — ele é a fonte de verdade.
 
@@ -336,8 +342,11 @@ Setup completo em [`CONTRIBUTING.md`](./CONTRIBUTING.md).
 
 > **Fonte de verdade obrigatória:** [`docs/GIT-WORKFLOW-BEST-PRACTICES.md`](./docs/GIT-WORKFLOW-BEST-PRACTICES.md). O resumo abaixo é só pra orientação rápida — se conflitar com o doc, vale o doc.
 
-- Branches: `main` é a única permanente. Trabalho em branches temporárias `feat/`, `fix/`, `chore/`, `docs/`, `refactor/`, `hotfix/`.
-- **Nunca commit direto em `main`** — sempre PR + squash merge.
+- **Duas branches permanentes:** `main` (produção) e `dev` (staging). Trabalho em branches temporárias `feat/`, `fix/`, `chore/`, `docs/`, `refactor/`, `hotfix/`.
+- **Branches temporárias partem de `dev`** (exceto `hotfix/*` que parte de `main`).
+- **Apenas `main` e `dev` deployam na Vercel.** Branches temporárias não geram preview deployment.
+- **Nunca commit direto em `main` ou `dev`** — sempre PR.
+- **Squash merge** pra `feat/*` → `dev`. **Merge commit** pra `dev` → `main` (release).
 - **Conventional Commits**: `feat:`, `fix:`, `chore:`, `refactor:`, `docs:`, `test:`, `style:`, `perf:`, `ci:`. Escopo opcional: `feat(transactions): add filters`.
 
 Antes de abrir PR:
@@ -351,14 +360,21 @@ pnpm exec playwright test
 Fluxo padrão pra qualquer mudança:
 
 ```bash
-git checkout main && git pull origin main
+git checkout dev && git pull origin dev
 git checkout -b feat/nome-curto
 # ... commits atômicos com Conventional Commits ...
 pnpm lint && pnpm typecheck && pnpm build
 git push -u origin feat/nome-curto
-gh pr create --base main
+gh pr create --base dev
 # após review + CI verde:
 gh pr merge <num> --squash --delete-branch
+```
+
+Release (`dev` → `main`), quando staging estiver estável:
+
+```bash
+gh pr create --base main --head dev --title "release: ..."
+gh pr merge <num> --merge --delete-branch=false
 ```
 
 Detalhes completos (SemVer, hotfix, comandos, armadilhas, PR template): [`docs/GIT-WORKFLOW-BEST-PRACTICES.md`](./docs/GIT-WORKFLOW-BEST-PRACTICES.md).
