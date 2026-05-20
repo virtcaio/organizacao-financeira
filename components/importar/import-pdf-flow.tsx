@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { LOADING_TEXT } from "@/lib/ui-text";
 import {
   Select,
   SelectContent,
@@ -332,7 +333,7 @@ export function ImportPdfFlow({
                       {isSaving ? (
                         <>
                           <Loader2Icon className="mr-2 size-4 animate-spin" />
-                          Salvando…
+                          {LOADING_TEXT.save}
                         </>
                       ) : (
                         <>

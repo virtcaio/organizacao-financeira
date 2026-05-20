@@ -35,21 +35,21 @@ export function KpiCards({
         title="Receitas do mês"
         value={formatCurrency(kpis.income, "BRL")}
         hint={monthLabel}
-        valueClassName="text-emerald-600"
-        icon={<ArrowUpIcon className="size-4 text-emerald-600" />}
+        valueClassName="text-income"
+        icon={<ArrowUpIcon className="size-4 text-income" />}
       />
       <KpiCard
         title="Despesas do mês"
         value={formatCurrency(kpis.expense, "BRL")}
         hint={monthLabel}
-        valueClassName="text-rose-600"
-        icon={<ArrowDownIcon className="size-4 text-rose-600" />}
+        valueClassName="text-expense"
+        icon={<ArrowDownIcon className="size-4 text-expense" />}
       />
       <KpiCard
         title="Resultado do mês"
         value={formatCurrency(kpis.net, "BRL")}
         hint={kpis.net >= 0 ? "Sobra positiva" : "Atenção: gastando mais que arrecadando"}
-        valueClassName={kpis.net >= 0 ? "text-emerald-600" : "text-rose-600"}
+        valueClassName={kpis.net >= 0 ? "text-income" : "text-expense"}
         icon={<TrendingUpIcon className="size-4 text-muted-foreground" />}
       />
     </div>

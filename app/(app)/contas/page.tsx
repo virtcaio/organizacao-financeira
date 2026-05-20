@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/table";
 import { NewAccountButton } from "@/components/contas/new-account-button";
 import { AccountRowActions } from "@/components/contas/account-row-actions";
+import { EmptyState } from "@/components/ui/empty-state";
 import { listFinancialAccountsAction } from "@/lib/actions/financial-accounts";
 import {
   FINANCIAL_ACCOUNT_TYPE_LABELS,
@@ -34,7 +35,12 @@ export default async function ContasPage() {
       </header>
 
       {accounts.length === 0 ? (
-        <EmptyState />
+        <EmptyState
+          variant="list"
+          title="Nenhuma conta cadastrada"
+          description="Comece criando sua primeira conta."
+          action={<NewAccountButton />}
+        />
       ) : (
         <div className="rounded-lg border">
           <Table>
@@ -87,16 +93,3 @@ export default async function ContasPage() {
   );
 }
 
-function EmptyState() {
-  return (
-    <div className="rounded-lg border bg-card p-12 text-center">
-      <h2 className="font-medium">Nenhuma conta cadastrada</h2>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Comece criando sua primeira conta.
-      </p>
-      <div className="mt-6 flex justify-center">
-        <NewAccountButton />
-      </div>
-    </div>
-  );
-}

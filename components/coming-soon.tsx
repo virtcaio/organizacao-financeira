@@ -1,4 +1,4 @@
-import { ConstructionIcon } from "lucide-react";
+import { EmptyState } from "@/components/ui/empty-state";
 
 export function ComingSoon({
   title,
@@ -13,10 +13,7 @@ export function ComingSoon({
         <h1 className="text-2xl font-semibold">{title}</h1>
         <p className="text-sm text-muted-foreground">{description}</p>
       </header>
-      <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed bg-card p-12 text-center text-muted-foreground">
-        <ConstructionIcon className="size-6" />
-        <p className="text-sm">Em construção. Voltamos com novidades em breve.</p>
-      </div>
+      <EmptyState variant="coming-soon" />
     </div>
   );
 }
