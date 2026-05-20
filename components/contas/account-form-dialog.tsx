@@ -15,6 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { LOADING_TEXT } from "@/lib/ui-text";
 import {
   Select,
   SelectContent,
@@ -173,7 +174,7 @@ export function AccountFormDialog({ account, open, onOpenChange }: Props) {
               }
             />
             <Button type="submit" disabled={isPending}>
-              {isPending ? "Salvando..." : isEdit ? "Salvar" : "Criar conta"}
+              {isPending ? LOADING_TEXT.save : isEdit ? "Salvar" : "Criar conta"}
             </Button>
           </DialogFooter>
         </form>
