@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 import {
   clearAnthropicApiKey,
   getAnthropicApiKey,
@@ -9,35 +9,36 @@ import {
 
 const STORAGE_EVENT = "anthropic-api-key-changed";
 
+function subscribe(callback: () => void) {
+  if (typeof window === "undefined") return () => {};
+  window.addEventListener(STORAGE_EVENT, callback);
+  window.addEventListener("storage", callback);
+  return () => {
+    window.removeEventListener(STORAGE_EVENT, callback);
+    window.removeEventListener("storage", callback);
+  };
+}
+
+function getSnapshot(): string | null {
+  return getAnthropicApiKey();
+}
+
+function getServerSnapshot(): string | null {
+  return null;
+}
+
 /** Hook que reativamente lê e escreve a API key da Anthropic em localStorage. */
 export function useAnthropicKey() {
-  const [key, setKeyState] = useState<string | null>(null);
-  const [loaded, setLoaded] = useState(false);
-
-  useEffect(() => {
-    setKeyState(getAnthropicApiKey());
-    setLoaded(true);
-
-    function onChange() {
-      setKeyState(getAnthropicApiKey());
-    }
-    window.addEventListener(STORAGE_EVENT, onChange);
-    window.addEventListener("storage", onChange);
-    return () => {
-      window.removeEventListener(STORAGE_EVENT, onChange);
-      window.removeEventListener("storage", onChange);
-    };
-  }, []);
+  const key = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const loaded = typeof window !== "undefined";
 
   const save = useCallback((value: string) => {
     setAnthropicApiKey(value);
-    setKeyState(value.trim());
     window.dispatchEvent(new Event(STORAGE_EVENT));
   }, []);
 
   const clear = useCallback(() => {
     clearAnthropicApiKey();
-    setKeyState(null);
     window.dispatchEvent(new Event(STORAGE_EVENT));
   }, []);
 
