@@ -47,11 +47,11 @@ test("cadastro → dashboard → contas → importar guards", async ({ page, con
   // 6. Bulk endpoint refuses unauthenticated calls — sanity check via fetch with no session.
   const newContext = await context.browser()!.newContext();
   const newPage = await newContext.newPage();
-  const r1 = await newPage.request.post("http://localhost:3005/api/transactions/bulk", {
+  const r1 = await newPage.request.post("/api/transactions/bulk", {
     data: { rows: [] },
   });
   expect(r1.status()).toBe(401);
-  const r2 = await newPage.request.post("http://localhost:3005/api/ai/validate-key", {
+  const r2 = await newPage.request.post("/api/ai/validate-key", {
     headers: { "x-anthropic-key": "sk-ant-anything" },
   });
   expect(r2.status()).toBe(401);
