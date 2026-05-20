@@ -6,6 +6,22 @@ Para visão de produto e onboarding humano, ver [`README.md`](./README.md), [`PR
 
 ---
 
+## ⚠️ Regra inegociável — Git workflow
+
+> **SEMPRE seguir [`docs/GIT-WORKFLOW-BEST-PRACTICES.md`](./docs/GIT-WORKFLOW-BEST-PRACTICES.md) em toda interação com Git.**
+
+Em particular:
+
+- **NUNCA commitar direto em `main`.** Todo trabalho começa criando uma branch temporária (`feat/`, `fix/`, `chore/`, `refactor/`, `docs/`, `hotfix/`) a partir de `main` atualizado e segue via Pull Request.
+- **Commits seguem Conventional Commits** (`feat:`, `fix:`, `chore:`, `refactor:`, `docs:`, `test:`, `style:`, `perf:`, `ci:`). Um commit = uma mudança lógica.
+- **Antes de abrir PR**, rodar `pnpm lint && pnpm typecheck && pnpm build` (e `pnpm exec playwright test` se mudou UI/rotas/forms). O CI cobre esses três, mas é melhor pegar local.
+- **Squash merge** em `main`. CI precisa estar verde antes do merge.
+- **Nunca force-push em `main`.**
+
+Antes de cada sessão de implementação, executar mentalmente o checklist da seção 3 do `docs/GIT-WORKFLOW-BEST-PRACTICES.md`. Se em dúvida sobre comando, branch ou merge strategy, consultar primeiro o doc — ele é a fonte de verdade.
+
+---
+
 ## 1. Project overview
 
 App web **self-hosted** de gestão financeira pessoal/familiar com IA. Cada usuário hospeda a própria instância (Vercel + Supabase) e usa a própria chave Anthropic (BYOK). Não existe servidor central do projeto.
@@ -316,7 +332,9 @@ Setup completo em [`CONTRIBUTING.md`](./CONTRIBUTING.md).
 
 ---
 
-## 10. Git workflow (resumo)
+## 10. Git workflow (resumo — leia a regra inegociável no topo deste arquivo)
+
+> **Fonte de verdade obrigatória:** [`docs/GIT-WORKFLOW-BEST-PRACTICES.md`](./docs/GIT-WORKFLOW-BEST-PRACTICES.md). O resumo abaixo é só pra orientação rápida — se conflitar com o doc, vale o doc.
 
 - Branches: `main` é a única permanente. Trabalho em branches temporárias `feat/`, `fix/`, `chore/`, `docs/`, `refactor/`, `hotfix/`.
 - **Nunca commit direto em `main`** — sempre PR + squash merge.
@@ -330,7 +348,20 @@ pnpm lint && pnpm typecheck && pnpm build
 pnpm exec playwright test
 ```
 
-Mais detalhes (SemVer, hotfix, comandos, armadilhas): [`docs/GIT-WORKFLOW-BEST-PRACTICES.md`](./docs/GIT-WORKFLOW-BEST-PRACTICES.md).
+Fluxo padrão pra qualquer mudança:
+
+```bash
+git checkout main && git pull origin main
+git checkout -b feat/nome-curto
+# ... commits atômicos com Conventional Commits ...
+pnpm lint && pnpm typecheck && pnpm build
+git push -u origin feat/nome-curto
+gh pr create --base main
+# após review + CI verde:
+gh pr merge <num> --squash --delete-branch
+```
+
+Detalhes completos (SemVer, hotfix, comandos, armadilhas, PR template): [`docs/GIT-WORKFLOW-BEST-PRACTICES.md`](./docs/GIT-WORKFLOW-BEST-PRACTICES.md).
 
 ---
 
