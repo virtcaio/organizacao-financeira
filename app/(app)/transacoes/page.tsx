@@ -96,7 +96,7 @@ export default async function TransacoesPage() {
                     <TableCell className="text-muted-foreground">{t.accountName}</TableCell>
                     <TableCell
                       className={`text-right tabular-nums font-medium ${
-                        isIncome ? "text-emerald-600" : ""
+                        isIncome ? "text-income" : "text-expense"
                       }`}
                     >
                       {isIncome ? "+ " : "− "}
