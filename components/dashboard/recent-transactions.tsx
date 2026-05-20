@@ -38,7 +38,7 @@ export function RecentTransactions({ transactions }: { transactions: RecentTrans
                   </div>
                   <span
                     className={`shrink-0 text-sm font-medium tabular-nums ${
-                      isIncome ? "text-emerald-600" : ""
+                      isIncome ? "text-income" : "text-expense"
                     }`}
                   >
                     {isIncome ? "+ " : "− "}
