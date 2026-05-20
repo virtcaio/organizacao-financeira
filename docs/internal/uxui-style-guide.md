@@ -408,11 +408,20 @@ Mapeamento em `lib/account-icons.tsx` (a criar).
 ## 12. Datas
 
 - **Armazenar como string ISO `YYYY-MM-DD`** (não `Date`) em campos do tipo `date`.
-- **Formatar com `formatDate()`** de `lib/format.ts`.
+- **Formatar com `formatDate()`** de `lib/format.ts` — aceita string ISO `YYYY-MM-DD` e formata em UTC pra preservar o componente "dia".
+- **Boundaries de mês / "hoje":** sempre usar helpers de `lib/date.ts` (`todayIso`, `monthStartIso`, `monthEndIso`, `monthStartIsoBack`) que respeitam `APP_TIMEZONE` (default `America/Sao_Paulo`). **Nunca** `new Date().getMonth()` direto — em ambiente UTC (Vercel) causa off-by-one no fim do mês.
 - **Comparar como string** (`'2026-05-19' < '2026-05-20'` é válido em ISO).
 - **Display padrão:** `dd MMM` em listas (`19 mai`), `dd MMM yyyy` em detalhes.
 
-> Bug aberto sobre timezone implícito: [#10](https://github.com/virtcaio/organizacao-financeira/issues/10). Após resolver, atualizar esta seção com o helper canônico.
+```tsx
+import { todayIso, monthStartIso, monthEndIso } from "@/lib/date";
+import { formatDate } from "@/lib/format";
+
+const hoje = todayIso();                // "2026-05-20"
+const inicio = monthStartIso();         // "2026-05-01"
+const fim = monthEndIso();              // "2026-05-31"
+formatDate("2026-05-19", { day: "2-digit", month: "short" }); // "19 mai"
+```
 
 ---
 

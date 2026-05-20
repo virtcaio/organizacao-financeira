@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { LOADING_TEXT } from "@/lib/ui-text";
+import { todayIso } from "@/lib/date";
 import {
   Select,
   SelectContent,
@@ -63,14 +64,6 @@ type Props = {
   categories: CategoryNode[];
   transaction?: TransactionDraft;
 };
-
-function todayIso() {
-  const d = new Date();
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-}
 
 export function TransactionFormDialog({
   open,
