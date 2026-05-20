@@ -160,7 +160,8 @@ Imports usam alias `@/*`.
 - **Server Actions** em `camelCase` com **sufixo `Action`** (`createTransactionAction`, `archiveFinancialAccountAction`).
 - Variáveis e funções comuns em `camelCase`. Constantes top-level em `SCREAMING_SNAKE_CASE` (ex: `FINANCIAL_ACCOUNT_TYPES`).
 - **Server Components por padrão.** Adicione `"use client"` só onde precisa: interação, hooks (`useState`, `useTransition`, `useRouter`, `usePathname`), Web APIs.
-- **Datas e valores monetários:** datas em `Date`/ISO `YYYY-MM-DD`; monetário usa `numeric(14,2)` no Postgres e trafega como **string** (pra preservar precisão decimal). Converta com `Number()` só no momento de cálculo. Formate na borda com `formatCurrency()` em `lib/format.ts`.
+- **Datas:** ISO string `YYYY-MM-DD` no Postgres (coluna `date`, sem fuso). Para "hoje" / boundaries de mês, **sempre** use helpers de [`lib/date.ts`](./lib/date.ts) (`todayIso`, `monthStartIso`, `monthEndIso`, `monthStartIsoBack`) que respeitam `APP_TIMEZONE` (default `America/Sao_Paulo`) — `new Date().getMonth()` direto em ambiente UTC (Vercel) causa off-by-one no fim do mês. Para formatação, `formatDate()` em [`lib/format.ts`](./lib/format.ts) aceita ISO string e formata em UTC pra preservar o componente "dia".
+- **Valores monetários:** `numeric(14,2)` no Postgres, trafega como **string** (pra preservar precisão decimal). Converta com `Number()` só no momento de cálculo. Formate na borda com `formatCurrency()` em `lib/format.ts`.
 
 ---
 

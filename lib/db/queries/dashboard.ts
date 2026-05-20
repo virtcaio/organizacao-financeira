@@ -2,17 +2,7 @@ import "server-only";
 import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { categories, financialAccounts, transactions } from "@/lib/db/schema";
-
-/** ISO date (YYYY-MM-DD) of the first day of the month, in local time. */
-function monthStartIso(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
-}
-
-/** ISO date (YYYY-MM-DD) of the last day of a month. */
-function monthEndIso(year: number, monthIndex: number): string {
-  const d = new Date(year, monthIndex + 1, 0); // day 0 = last day of previous month
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
+import { monthEndIso, monthStartIso, monthStartIsoBack } from "@/lib/date";
 
 export type CurrencyBalance = {
   currency: string;
@@ -83,7 +73,7 @@ export type MonthlyKpis = {
 /** KPIs do mês corrente em BRL. */
 export async function getMonthlyKpisBRL(userId: string, now = new Date()): Promise<MonthlyKpis> {
   const start = monthStartIso(now);
-  const end = monthEndIso(now.getFullYear(), now.getMonth());
+  const end = monthEndIso(now);
 
   const rows = await db
     .select({
@@ -123,7 +113,7 @@ export async function getCategoryBreakdownBRL(
   now = new Date(),
 ): Promise<CategoryBreakdownItem[]> {
   const start = monthStartIso(now);
-  const end = monthEndIso(now.getFullYear(), now.getMonth());
+  const end = monthEndIso(now);
 
   // Get all transactions of the month with their (subcategory) data
   const txWithCat = await db
@@ -203,9 +193,8 @@ export async function getMonthlyEvolutionBRL(
   monthsBack = 6,
   now = new Date(),
 ): Promise<MonthlyPoint[]> {
-  const start = new Date(now.getFullYear(), now.getMonth() - (monthsBack - 1), 1);
-  const startIso = monthStartIso(start);
-  const endIso = monthEndIso(now.getFullYear(), now.getMonth());
+  const startIso = monthStartIsoBack(monthsBack - 1, now);
+  const endIso = monthEndIso(now);
 
   const rows = await db
     .select({
@@ -231,10 +220,11 @@ export async function getMonthlyEvolutionBRL(
     "jul", "ago", "set", "out", "nov", "dez",
   ];
   for (let i = 0; i < monthsBack; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth() - (monthsBack - 1) + i, 1);
+    const iso = monthStartIsoBack(monthsBack - 1 - i, now);
+    const monthIdx = Number(iso.slice(5, 7)) - 1;
     points.push({
-      monthIso: monthStartIso(d),
-      label: monthNames[d.getMonth()],
+      monthIso: iso,
+      label: monthNames[monthIdx],
       income: 0,
       expense: 0,
     });
