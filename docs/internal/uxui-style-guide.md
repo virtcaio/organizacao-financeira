@@ -7,7 +7,7 @@ Este doc consolida as decisões de UI/UX do projeto. Cada regra tem:
 - **Por quê**: a motivação (geralmente uma inconsistência observada)
 - **Como aplicar**: snippet ou regra mecânica
 
-Origem: auditoria em [`04-uxui-inconsistencias.md`](./04-uxui-inconsistencias.md) e sugestões em [`03-uxui-sugestoes-de-melhoria.md`](./03-uxui-sugestoes-de-melhoria.md). Issue de tracking: [#11](https://github.com/virtcaio/organizacao-financeira/issues/11).
+Issue de tracking: [#11](https://github.com/virtcaio/organizacao-financeira/issues/11).
 
 Quando bater em dúvida durante review de PR, este doc resolve. Se não cobrir o caso, atualize o doc no mesmo PR — não decida silenciosamente.
 
@@ -426,8 +426,6 @@ Não é uma seção isolada — toda decisão acima já incorpora. Resumo de che
 - [ ] Botões nativos para triggers (Base UI exige)
 - [ ] Foco visível (`focus-visible:ring-2 ring-ring`) — já vem do shadcn
 
-Auditoria detalhada: [`12-acessibilidade.md`](./12-acessibilidade.md).
-
 ---
 
 ## 14. Apêndice — tokens completos (CSS variables)
@@ -476,9 +474,6 @@ E nos blocos `:root` / `.dark`:
 
 ## Referências
 
-- [`04-uxui-inconsistencias.md`](./04-uxui-inconsistencias.md) — auditoria que originou estas decisões
-- [`03-uxui-sugestoes-de-melhoria.md`](./03-uxui-sugestoes-de-melhoria.md) — oportunidades correlatas
-- [`12-acessibilidade.md`](./12-acessibilidade.md) — WCAG 2.1 AA
 - [shadcn/ui (Base UI)](https://ui.shadcn.com/docs)
 - [Tailwind CSS v4](https://tailwindcss.com/blog/tailwindcss-v4)
 - Issue de tracking: [#11](https://github.com/virtcaio/organizacao-financeira/issues/11)
