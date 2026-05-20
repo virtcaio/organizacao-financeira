@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { deleteTransactionAction } from "@/lib/actions/transactions";
+import { LOADING_TEXT } from "@/lib/ui-text";
 import {
   TransactionFormDialog,
   type AccountOption,
@@ -107,7 +108,7 @@ export function TransactionRowActions({
               }}
               disabled={isPending}
             >
-              {isPending ? "Excluindo..." : "Excluir"}
+              {isPending ? LOADING_TEXT.delete : "Excluir"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

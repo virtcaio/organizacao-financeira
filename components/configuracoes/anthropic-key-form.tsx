@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { useAnthropicKey } from "@/lib/ai/use-anthropic-key";
 import { validateAnthropicKey } from "@/lib/ai/client";
 import { maskApiKey } from "@/lib/ai/storage";
+import { LOADING_TEXT } from "@/lib/ui-text";
 
 export function AnthropicKeyForm() {
   const { key, loaded, hasKey, save, clear } = useAnthropicKey();
@@ -121,7 +122,7 @@ export function AnthropicKeyForm() {
               </p>
             </div>
             <Button type="submit" disabled={isPending || input.length < 10}>
-              {isPending ? "Validando…" : "Salvar e validar"}
+              {isPending ? LOADING_TEXT.validate : "Salvar e validar"}
             </Button>
           </form>
         )}

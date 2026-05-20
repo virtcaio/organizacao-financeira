@@ -6,6 +6,7 @@ import { signIn } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { LOADING_TEXT } from "@/lib/ui-text";
 
 export function LoginForm() {
   const router = useRouter();
@@ -66,7 +67,7 @@ export function LoginForm() {
         </p>
       ) : null}
       <Button type="submit" disabled={isPending}>
-        {isPending ? "Entrando..." : "Entrar"}
+        {isPending ? LOADING_TEXT.authenticate : "Entrar"}
       </Button>
     </form>
   );

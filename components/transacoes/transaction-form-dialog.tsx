@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { LOADING_TEXT } from "@/lib/ui-text";
 import {
   Select,
   SelectContent,
@@ -299,7 +300,7 @@ export function TransactionFormDialog({
               }
             />
             <Button type="submit" disabled={isPending}>
-              {isPending ? "Salvando..." : isEdit ? "Salvar" : "Criar transação"}
+              {isPending ? LOADING_TEXT.save : isEdit ? "Salvar" : "Criar transação"}
             </Button>
           </DialogFooter>
         </form>

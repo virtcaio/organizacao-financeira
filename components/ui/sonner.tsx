@@ -3,13 +3,17 @@
 import { useTheme } from "next-themes"
 import { Toaster as Sonner, type ToasterProps } from "sonner"
 import { CircleCheckIcon, InfoIcon, TriangleAlertIcon, OctagonXIcon, Loader2Icon } from "lucide-react"
+import { useIsMobile } from "@/hooks/use-mobile"
 
-const Toaster = ({ ...props }: ToasterProps) => {
+const Toaster = ({ position, ...props }: ToasterProps) => {
   const { theme = "system" } = useTheme()
+  const isMobile = useIsMobile()
+  const effectivePosition = position ?? (isMobile ? "bottom-center" : "top-right")
 
   return (
     <Sonner
       theme={theme as ToasterProps["theme"]}
+      position={effectivePosition}
       className="toaster group"
       icons={{
         success: (
