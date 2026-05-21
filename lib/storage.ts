@@ -51,3 +51,14 @@ export async function signedReceiptUrl(
   }
   return data.signedUrl;
 }
+
+/** Remove um comprovante do bucket. Silencioso se já não existe. */
+export async function removeReceipt(key: string): Promise<void> {
+  const supabase = storageClient();
+  await supabase.storage.from(RECEIPTS_BUCKET).remove([key]);
+}
+
+/** Confere se a key pertence ao usuário (path é `${userId}/...`). */
+export function isOwnReceiptKey(key: string, userId: string): boolean {
+  return key.startsWith(`${userId}/`);
+}

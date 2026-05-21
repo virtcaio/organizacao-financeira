@@ -27,6 +27,7 @@ export function ReceiptCaptureButton({
   const inputRef = useRef<HTMLInputElement>(null);
   const [processing, setProcessing] = useState(false);
   const [prefill, setPrefill] = useState<TransactionPrefill | null>(null);
+  const [receiptKey, setReceiptKey] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
 
   function onPick() {
@@ -58,6 +59,7 @@ export function ReceiptCaptureButton({
       description: d.description,
       categoryId: d.category_id ?? undefined,
     });
+    setReceiptKey(res.receiptKey);
     setFormOpen(true);
     toast.success(
       d.merchant ? `Comprovante lido — ${d.merchant}` : "Comprovante lido — confira os dados.",
@@ -89,13 +91,14 @@ export function ReceiptCaptureButton({
       />
       {prefill ? (
         <TransactionFormDialog
-          key={JSON.stringify(prefill)}
+          key={receiptKey ?? JSON.stringify(prefill)}
           open={formOpen}
           onOpenChange={setFormOpen}
           accounts={accounts}
           categories={categories}
           tags={tags}
           prefill={prefill}
+          receiptKey={receiptKey ?? undefined}
         />
       ) : null}
     </>

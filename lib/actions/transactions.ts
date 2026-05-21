@@ -15,6 +15,7 @@ import { transactionInputSchema, transferInputSchema } from "@/types/transaction
 import { getTagsByTransactionIds } from "@/lib/db/queries/tags";
 import type { Tag } from "@/types/tag";
 import { randomUUID } from "node:crypto";
+import { removeReceipt, isOwnReceiptKey } from "@/lib/storage";
 
 /**
  * Substitui as tags de uma transação pelas informadas.
@@ -74,6 +75,7 @@ export type TransactionListItem = {
   categoryName: string | null;
   categoryParentName: string | null;
   transferPairId: string | null;
+  receiptKey: string | null;
   tags: Tag[];
 };
 
@@ -95,6 +97,7 @@ export async function listTransactionsAction(): Promise<TransactionListItem[]> {
       categoryName: parentCategory.name,
       categoryParentId: parentCategory.parentId,
       transferPairId: transactions.transferPairId,
+      sourceRef: transactions.sourceRef,
     })
     .from(transactions)
     .innerJoin(financialAccounts, eq(financialAccounts.id, transactions.financialAccountId))
@@ -135,6 +138,7 @@ export async function listTransactionsAction(): Promise<TransactionListItem[]> {
       ? parentNameById.get(r.categoryParentId) ?? null
       : null,
     transferPairId: r.transferPairId,
+    receiptKey: r.sourceRef,
     tags: tagsByTx.get(r.id) ?? [],
   }));
 }
@@ -169,6 +173,9 @@ export async function createTransactionAction(
     return { ok: false, error: "Conta não encontrada" };
   }
 
+  // Comprovante anexado (vindo do OCR). Só aceita key do próprio usuário.
+  const hasReceipt = !!data.receiptKey && isOwnReceiptKey(data.receiptKey, userId);
+
   const [row] = await db
     .insert(transactions)
     .values({
@@ -181,7 +188,8 @@ export async function createTransactionAction(
       date: data.date,
       description: data.description,
       notes: data.notes ?? null,
-      source: "manual",
+      source: hasReceipt ? "photo" : "manual",
+      sourceRef: hasReceipt ? data.receiptKey : null,
     })
     .returning({ id: transactions.id });
 
@@ -236,12 +244,24 @@ export async function updateTransactionAction(
 
 export async function deleteTransactionAction(id: string): Promise<ActionResult> {
   const userId = await requireUserId();
+
+  // Lê o comprovante antes de apagar — pra remover o arquivo do Storage.
+  const [existing] = await db
+    .select({ sourceRef: transactions.sourceRef })
+    .from(transactions)
+    .where(and(eq(transactions.id, id), eq(transactions.userId, userId)))
+    .limit(1);
+
   const result = await db
     .delete(transactions)
     .where(and(eq(transactions.id, id), eq(transactions.userId, userId)));
 
   if (result.count === 0) {
     return { ok: false, error: "Transação não encontrada" };
+  }
+
+  if (existing?.sourceRef && isOwnReceiptKey(existing.sourceRef, userId)) {
+    await removeReceipt(existing.sourceRef);
   }
 
   revalidatePath("/transacoes");
