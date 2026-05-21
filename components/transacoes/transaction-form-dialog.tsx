@@ -60,6 +60,15 @@ export type TransactionDraft = {
   tagIds: string[];
 };
 
+/** Valores iniciais pra modo criação (ex: pré-preenchimento por OCR). */
+export type TransactionPrefill = {
+  type?: TransactionType;
+  amount?: string;
+  date?: string;
+  description?: string;
+  categoryId?: string;
+};
+
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -67,6 +76,7 @@ type Props = {
   categories: CategoryNode[];
   tags: Tag[];
   transaction?: TransactionDraft;
+  prefill?: TransactionPrefill;
 };
 
 export function TransactionFormDialog({
@@ -76,12 +86,15 @@ export function TransactionFormDialog({
   categories,
   tags,
   transaction,
+  prefill,
 }: Props) {
   const router = useRouter();
   const isEdit = !!transaction;
   const [isPending, startTransition] = useTransition();
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [type, setType] = useState<TransactionType>(transaction?.type ?? "expense");
+  const [type, setType] = useState<TransactionType>(
+    transaction?.type ?? prefill?.type ?? "expense",
+  );
   const [accountId, setAccountId] = useState<string>(
     transaction?.financialAccountId ?? accounts[0]?.id ?? "",
   );
@@ -179,7 +192,7 @@ export function TransactionFormDialog({
                 id="date"
                 name="date"
                 type="date"
-                defaultValue={transaction?.date ?? todayIso()}
+                defaultValue={transaction?.date ?? prefill?.date ?? todayIso()}
                 required
                 disabled={isPending}
               />
@@ -219,7 +232,7 @@ export function TransactionFormDialog({
               <Input
                 id="description"
                 name="description"
-                defaultValue={transaction?.description ?? ""}
+                defaultValue={transaction?.description ?? prefill?.description ?? ""}
                 placeholder="Supermercado Pão de Açúcar"
                 required
                 disabled={isPending}
@@ -232,7 +245,7 @@ export function TransactionFormDialog({
                 id="amount"
                 name="amount"
                 inputMode="decimal"
-                defaultValue={transaction?.amount ?? ""}
+                defaultValue={transaction?.amount ?? prefill?.amount ?? ""}
                 placeholder="0,00"
                 required
                 disabled={isPending}
@@ -245,7 +258,7 @@ export function TransactionFormDialog({
             <Label htmlFor="categoryId">Categoria</Label>
             <Select
               name="categoryId"
-              defaultValue={transaction?.categoryId ?? ""}
+              defaultValue={transaction?.categoryId ?? prefill?.categoryId ?? ""}
               disabled={isPending}
             >
               <SelectTrigger id="categoryId" className="w-full">

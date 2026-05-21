@@ -31,3 +31,18 @@ export const importPdfOutputSchema = z.object({
 });
 
 export type ImportPdfOutput = z.infer<typeof importPdfOutputSchema>;
+
+/** Schema do JSON esperado do Claude ao ler a foto de um comprovante. */
+export const ocrReceiptOutputSchema = z.object({
+  amount: z.number().positive("Valor precisa ser positivo"),
+  date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Data deve estar em formato YYYY-MM-DD")
+    .nullable(),
+  merchant: z.string().nullable(),
+  description: z.string().min(1).max(200),
+  category_id: z.string().uuid().nullable(),
+  category_name: z.string().nullable(),
+});
+
+export type OcrReceiptOutput = z.infer<typeof ocrReceiptOutputSchema>;
