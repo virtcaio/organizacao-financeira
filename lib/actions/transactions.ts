@@ -1,11 +1,46 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { transactions, financialAccounts, categories } from "@/lib/db/schema";
+import {
+  transactions,
+  financialAccounts,
+  categories,
+  tags,
+  transactionTags,
+} from "@/lib/db/schema";
 import { requireUserId } from "@/lib/auth-helpers";
 import { transactionInputSchema } from "@/types/transaction";
+import { getTagsByTransactionIds } from "@/lib/db/queries/tags";
+import type { Tag } from "@/types/tag";
+
+/**
+ * Substitui as tags de uma transação pelas informadas.
+ * Filtra tagIds que não pertencem ao usuário (defense-in-depth).
+ */
+async function syncTransactionTags(
+  userId: string,
+  transactionId: string,
+  tagIds: string[] | undefined,
+) {
+  await db
+    .delete(transactionTags)
+    .where(eq(transactionTags.transactionId, transactionId));
+
+  if (!tagIds || tagIds.length === 0) return;
+
+  const owned = await db
+    .select({ id: tags.id })
+    .from(tags)
+    .where(and(eq(tags.userId, userId), inArray(tags.id, tagIds)));
+  const ownedIds = owned.map((t) => t.id);
+  if (ownedIds.length === 0) return;
+
+  await db
+    .insert(transactionTags)
+    .values(ownedIds.map((tagId) => ({ transactionId, tagId })));
+}
 
 export type ActionResult<T = void> =
   | { ok: true; data: T }
@@ -37,6 +72,7 @@ export type TransactionListItem = {
   categoryId: string | null;
   categoryName: string | null;
   categoryParentName: string | null;
+  tags: Tag[];
 };
 
 export async function listTransactionsAction(): Promise<TransactionListItem[]> {
@@ -75,6 +111,11 @@ export async function listTransactionsAction(): Promise<TransactionListItem[]> {
     : [];
   const parentNameById = new Map(parents.map((p) => [p.id, p.name]));
 
+  const tagsByTx = await getTagsByTransactionIds(
+    userId,
+    rows.map((r) => r.id),
+  );
+
   return rows.map((r) => ({
     id: r.id,
     type: r.type,
@@ -90,6 +131,7 @@ export async function listTransactionsAction(): Promise<TransactionListItem[]> {
     categoryParentName: r.categoryParentId
       ? parentNameById.get(r.categoryParentId) ?? null
       : null,
+    tags: tagsByTx.get(r.id) ?? [],
   }));
 }
 
@@ -139,6 +181,8 @@ export async function createTransactionAction(
     })
     .returning({ id: transactions.id });
 
+  await syncTransactionTags(userId, row.id, data.tagIds);
+
   revalidatePath("/transacoes");
   revalidatePath("/dashboard");
   return { ok: true, data: { id: row.id } };
@@ -178,6 +222,8 @@ export async function updateTransactionAction(
   if (result.count === 0) {
     return { ok: false, error: "Transação não encontrada" };
   }
+
+  await syncTransactionTags(userId, id, data.tagIds);
 
   revalidatePath("/transacoes");
   revalidatePath("/dashboard");

@@ -30,15 +30,18 @@ import {
   type TransactionDraft,
 } from "./transaction-form-dialog";
 import type { CategoryNode } from "@/lib/db/queries/categories";
+import type { Tag } from "@/types/tag";
 
 export function TransactionRowActions({
   transaction,
   accounts,
   categories,
+  tags,
 }: {
   transaction: TransactionDraft;
   accounts: AccountOption[];
   categories: CategoryNode[];
+  tags: Tag[];
 }) {
   const router = useRouter();
   const [editOpen, setEditOpen] = useState(false);
@@ -88,6 +91,7 @@ export function TransactionRowActions({
         onOpenChange={setEditOpen}
         accounts={accounts}
         categories={categories}
+        tags={tags}
         transaction={transaction}
       />
 

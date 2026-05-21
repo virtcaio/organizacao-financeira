@@ -41,6 +41,7 @@ export const transactionInputSchema = z.object({
     .max(1000)
     .transform((v) => (v === "" ? undefined : v))
     .optional(),
+  tagIds: z.array(z.string().uuid()).optional(),
 });
 
 export type TransactionInput = z.infer<typeof transactionInputSchema>;
