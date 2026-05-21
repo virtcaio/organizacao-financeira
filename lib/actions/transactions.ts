@@ -11,9 +11,10 @@ import {
   transactionTags,
 } from "@/lib/db/schema";
 import { requireUserId } from "@/lib/auth-helpers";
-import { transactionInputSchema } from "@/types/transaction";
+import { transactionInputSchema, transferInputSchema } from "@/types/transaction";
 import { getTagsByTransactionIds } from "@/lib/db/queries/tags";
 import type { Tag } from "@/types/tag";
+import { randomUUID } from "node:crypto";
 
 /**
  * Substitui as tags de uma transação pelas informadas.
@@ -72,6 +73,7 @@ export type TransactionListItem = {
   categoryId: string | null;
   categoryName: string | null;
   categoryParentName: string | null;
+  transferPairId: string | null;
   tags: Tag[];
 };
 
@@ -92,6 +94,7 @@ export async function listTransactionsAction(): Promise<TransactionListItem[]> {
       categoryId: transactions.categoryId,
       categoryName: parentCategory.name,
       categoryParentId: parentCategory.parentId,
+      transferPairId: transactions.transferPairId,
     })
     .from(transactions)
     .innerJoin(financialAccounts, eq(financialAccounts.id, transactions.financialAccountId))
@@ -131,6 +134,7 @@ export async function listTransactionsAction(): Promise<TransactionListItem[]> {
     categoryParentName: r.categoryParentId
       ? parentNameById.get(r.categoryParentId) ?? null
       : null,
+    transferPairId: r.transferPairId,
     tags: tagsByTx.get(r.id) ?? [],
   }));
 }
@@ -239,6 +243,170 @@ export async function deleteTransactionAction(id: string): Promise<ActionResult>
   if (result.count === 0) {
     return { ok: false, error: "Transação não encontrada" };
   }
+
+  revalidatePath("/transacoes");
+  revalidatePath("/dashboard");
+  return { ok: true, data: undefined };
+}
+
+/**
+ * Cria uma transferência: duas linhas type=transfer ligadas por
+ * transferPairId. Linha de saída tem amount negativo, entrada positivo —
+ * assim sum(amount) por conta dá o saldo correto e o par é distinguível.
+ * Dashboard ignora type=transfer em receitas/despesas.
+ */
+export async function createTransferAction(
+  raw: unknown,
+): Promise<ActionResult<{ pairId: string }>> {
+  const userId = await requireUserId();
+  const parsed = transferInputSchema.safeParse(raw);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: "Dados inválidos",
+      fieldErrors: collectFieldErrors(parsed.error.issues),
+    };
+  }
+
+  const { fromAccountId, toAccountId, amount, date, description } = parsed.data;
+
+  const accts = await db
+    .select({
+      id: financialAccounts.id,
+      currency: financialAccounts.currency,
+    })
+    .from(financialAccounts)
+    .where(eq(financialAccounts.userId, userId));
+  const from = accts.find((a) => a.id === fromAccountId);
+  const to = accts.find((a) => a.id === toAccountId);
+  if (!from || !to) {
+    return { ok: false, error: "Conta não encontrada" };
+  }
+  if (from.currency !== to.currency) {
+    return {
+      ok: false,
+      error: "Transferência entre moedas diferentes ainda não é suportada",
+      fieldErrors: { toAccountId: "Moeda diferente da conta de origem" },
+    };
+  }
+
+  const outId = randomUUID();
+  const inId = randomUUID();
+  const currency = from.currency;
+
+  await db.transaction(async (tx) => {
+    await tx.insert(transactions).values([
+      {
+        id: outId,
+        userId,
+        financialAccountId: fromAccountId,
+        type: "transfer",
+        amount: `-${amount}`,
+        currency,
+        date,
+        description,
+        transferPairId: inId,
+        source: "manual",
+      },
+      {
+        id: inId,
+        userId,
+        financialAccountId: toAccountId,
+        type: "transfer",
+        amount,
+        currency,
+        date,
+        description,
+        transferPairId: outId,
+        source: "manual",
+      },
+    ]);
+  });
+
+  revalidatePath("/transacoes");
+  revalidatePath("/dashboard");
+  return { ok: true, data: { pairId: outId } };
+}
+
+/** Atualiza valor/data/descrição de ambas as linhas de uma transferência. */
+export async function updateTransferAction(
+  lineId: string,
+  raw: unknown,
+): Promise<ActionResult> {
+  const userId = await requireUserId();
+  const parsed = transferInputSchema.safeParse(raw);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: "Dados inválidos",
+      fieldErrors: collectFieldErrors(parsed.error.issues),
+    };
+  }
+  const { amount, date, description } = parsed.data;
+
+  const [line] = await db
+    .select({ id: transactions.id, pairId: transactions.transferPairId })
+    .from(transactions)
+    .where(
+      and(
+        eq(transactions.id, lineId),
+        eq(transactions.userId, userId),
+        eq(transactions.type, "transfer"),
+      ),
+    )
+    .limit(1);
+  if (!line || !line.pairId) {
+    return { ok: false, error: "Transferência não encontrada" };
+  }
+
+  await db.transaction(async (tx) => {
+    // A linha de saída mantém o sinal negativo; a de entrada, positivo.
+    for (const id of [line.id, line.pairId!]) {
+      const [current] = await tx
+        .select({ amount: transactions.amount })
+        .from(transactions)
+        .where(eq(transactions.id, id))
+        .limit(1);
+      const isOutgoing = current ? Number(current.amount) < 0 : false;
+      await tx
+        .update(transactions)
+        .set({
+          amount: isOutgoing ? `-${amount}` : amount,
+          date,
+          description,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(transactions.id, id), eq(transactions.userId, userId)));
+    }
+  });
+
+  revalidatePath("/transacoes");
+  revalidatePath("/dashboard");
+  return { ok: true, data: undefined };
+}
+
+/** Exclui ambas as linhas de uma transferência. */
+export async function deleteTransferAction(lineId: string): Promise<ActionResult> {
+  const userId = await requireUserId();
+  const [line] = await db
+    .select({ id: transactions.id, pairId: transactions.transferPairId })
+    .from(transactions)
+    .where(
+      and(
+        eq(transactions.id, lineId),
+        eq(transactions.userId, userId),
+        eq(transactions.type, "transfer"),
+      ),
+    )
+    .limit(1);
+  if (!line) {
+    return { ok: false, error: "Transferência não encontrada" };
+  }
+
+  const ids = line.pairId ? [line.id, line.pairId] : [line.id];
+  await db
+    .delete(transactions)
+    .where(and(eq(transactions.userId, userId), inArray(transactions.id, ids)));
 
   revalidatePath("/transacoes");
   revalidatePath("/dashboard");
