@@ -45,3 +45,22 @@ export const transactionInputSchema = z.object({
 });
 
 export type TransactionInput = z.infer<typeof transactionInputSchema>;
+
+export const transferInputSchema = z
+  .object({
+    fromAccountId: uuid,
+    toAccountId: uuid,
+    amount: amountString,
+    date: isoDate,
+    description: z
+      .string()
+      .trim()
+      .min(1, "Descreva a transferência")
+      .max(200),
+  })
+  .refine((d) => d.fromAccountId !== d.toAccountId, {
+    message: "Escolha contas diferentes",
+    path: ["toAccountId"],
+  });
+
+export type TransferInput = z.infer<typeof transferInputSchema>;

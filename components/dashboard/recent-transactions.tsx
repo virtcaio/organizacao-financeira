@@ -25,7 +25,21 @@ export function RecentTransactions({ transactions }: { transactions: RecentTrans
         ) : (
           <ul className="divide-y">
             {transactions.map((t) => {
+              const isTransfer = t.type === "transfer";
               const isIncome = t.type === "income";
+              const amountNum = Number(t.amount);
+              const valueClass = isTransfer
+                ? "text-transfer"
+                : isIncome
+                  ? "text-income"
+                  : "text-expense";
+              const sign = isTransfer
+                ? amountNum < 0
+                  ? "− "
+                  : "+ "
+                : isIncome
+                  ? "+ "
+                  : "− ";
               return (
                 <li key={t.id} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
                   <div className="min-w-0">
@@ -33,16 +47,18 @@ export function RecentTransactions({ transactions }: { transactions: RecentTrans
                     <p className="text-xs text-muted-foreground">
                       {formatDate(t.date, { day: "2-digit", month: "short" })} ·{" "}
                       {t.accountName}
-                      {t.categoryName ? ` · ${t.categoryName}` : ""}
+                      {isTransfer
+                        ? " · Transferência"
+                        : t.categoryName
+                          ? ` · ${t.categoryName}`
+                          : ""}
                     </p>
                   </div>
                   <span
-                    className={`shrink-0 text-sm font-medium tabular-nums ${
-                      isIncome ? "text-income" : "text-expense"
-                    }`}
+                    className={`shrink-0 text-sm font-medium tabular-nums ${valueClass}`}
                   >
-                    {isIncome ? "+ " : "− "}
-                    {formatCurrency(t.amount, t.currency)}
+                    {sign}
+                    {formatCurrency(Math.abs(amountNum), t.currency)}
                   </span>
                 </li>
               );
