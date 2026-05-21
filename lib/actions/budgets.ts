@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { budgets } from "@/lib/db/schema";
+import { budgets, budgetTemplates } from "@/lib/db/schema";
 import { requireUserId } from "@/lib/auth-helpers";
 import { budgetInputSchema } from "@/types/budget";
 import {
@@ -26,6 +26,11 @@ export async function getMonthlySummaryAction(monthIso: string) {
   return getMonthlyBudgetSummary(userId, monthIso);
 }
 
+/**
+ * Cria/atualiza orçamento. scope=template grava em budget_template (vale todo
+ * mês); scope=month grava em budget (override do mês). Upsert idempotente
+ * via UNIQUE constraint.
+ */
 export async function upsertBudgetAction(
   raw: unknown,
 ): Promise<ActionResult<{ id: string }>> {
@@ -42,9 +47,53 @@ export async function upsertBudgetAction(
     return { ok: false, error: "Dados inválidos", fieldErrors };
   }
 
-  const { categoryId, month, limit } = parsed.data;
+  const { categoryId, limit, scope, month } = parsed.data;
 
-  // Existing budget? (UNIQUE constraint per user+category+month)
+  const overlap = await findBudgetOverlap(
+    userId,
+    categoryId,
+    scope === "month" ? month! : null,
+  );
+  if (overlap) {
+    return {
+      ok: false,
+      error: `Categoria conflita com orçamento existente em "${overlap.conflictCategoryName}". Use apenas categoria-mãe OU subcategorias, não ambos.`,
+      fieldErrors: { categoryId: "Conflito com orçamento existente" },
+    };
+  }
+
+  if (scope === "template") {
+    const existing = await db
+      .select({ id: budgetTemplates.id })
+      .from(budgetTemplates)
+      .where(
+        and(
+          eq(budgetTemplates.userId, userId),
+          eq(budgetTemplates.categoryId, categoryId),
+        ),
+      );
+    if (existing[0]) {
+      await db
+        .update(budgetTemplates)
+        .set({ limitAmount: limit, updatedAt: new Date() })
+        .where(
+          and(
+            eq(budgetTemplates.id, existing[0].id),
+            eq(budgetTemplates.userId, userId),
+          ),
+        );
+      revalidatePath("/orcamento");
+      return { ok: true, data: { id: existing[0].id } };
+    }
+    const [row] = await db
+      .insert(budgetTemplates)
+      .values({ userId, categoryId, limitAmount: limit })
+      .returning({ id: budgetTemplates.id });
+    revalidatePath("/orcamento");
+    return { ok: true, data: { id: row.id } };
+  }
+
+  // scope === "month" — override
   const existing = await db
     .select({ id: budgets.id })
     .from(budgets)
@@ -52,49 +101,53 @@ export async function upsertBudgetAction(
       and(
         eq(budgets.userId, userId),
         eq(budgets.categoryId, categoryId),
-        eq(budgets.month, month),
+        eq(budgets.month, month!),
       ),
     );
-  const existingId = existing[0]?.id;
-
-  // Overlap check (mãe↔sub no mesmo mês)
-  const overlap = await findBudgetOverlap(userId, categoryId, month, existingId);
-  if (overlap) {
-    return {
-      ok: false,
-      error: `Categoria conflita com orçamento existente em "${overlap.conflictCategoryName}". Use apenas categoria-mãe OU subcategorias, não ambos no mesmo mês.`,
-      fieldErrors: { categoryId: "Conflito com orçamento existente" },
-    };
-  }
-
-  if (existingId) {
+  if (existing[0]) {
     await db
       .update(budgets)
       .set({ limitAmount: limit })
-      .where(and(eq(budgets.id, existingId), eq(budgets.userId, userId)));
+      .where(and(eq(budgets.id, existing[0].id), eq(budgets.userId, userId)));
     revalidatePath("/orcamento");
-    return { ok: true, data: { id: existingId } };
+    return { ok: true, data: { id: existing[0].id } };
   }
-
   const [row] = await db
     .insert(budgets)
-    .values({ userId, categoryId, month, limitAmount: limit })
+    .values({ userId, categoryId, month: month!, limitAmount: limit })
     .returning({ id: budgets.id });
-
   revalidatePath("/orcamento");
   return { ok: true, data: { id: row.id } };
 }
 
-export async function deleteBudgetAction(id: string): Promise<ActionResult> {
+/** Remove o orçamento padrão (template) de uma categoria. */
+export async function deleteBudgetTemplateAction(
+  templateId: string,
+): Promise<ActionResult> {
+  const userId = await requireUserId();
+  const result = await db
+    .delete(budgetTemplates)
+    .where(
+      and(eq(budgetTemplates.id, templateId), eq(budgetTemplates.userId, userId)),
+    );
+  if (result.count === 0) {
+    return { ok: false, error: "Orçamento padrão não encontrado" };
+  }
+  revalidatePath("/orcamento");
+  return { ok: true, data: undefined };
+}
+
+/** Remove o ajuste mensal (override), voltando ao template se houver. */
+export async function deleteBudgetOverrideAction(
+  overrideId: string,
+): Promise<ActionResult> {
   const userId = await requireUserId();
   const result = await db
     .delete(budgets)
-    .where(and(eq(budgets.id, id), eq(budgets.userId, userId)));
-
+    .where(and(eq(budgets.id, overrideId), eq(budgets.userId, userId)));
   if (result.count === 0) {
-    return { ok: false, error: "Orçamento não encontrado" };
+    return { ok: false, error: "Ajuste mensal não encontrado" };
   }
-
   revalidatePath("/orcamento");
   return { ok: true, data: undefined };
 }

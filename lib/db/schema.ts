@@ -296,6 +296,7 @@ export const categorizationRules = pgTable(
   (t) => [index("catrule_user_priority_idx").on(t.userId, t.priority)],
 );
 
+// Override mensal: limite específico de um mês. Tem prioridade sobre o template.
 export const budgets = pgTable(
   "budget",
   {
@@ -311,6 +312,24 @@ export const budgets = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex("budget_user_cat_month_uq").on(t.userId, t.categoryId, t.month)],
+);
+
+// Orçamento padrão recorrente: vale pra todo mês, salvo override em `budget`.
+export const budgetTemplates = pgTable(
+  "budget_template",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    categoryId: uuid("category_id")
+      .notNull()
+      .references(() => categories.id, { onDelete: "cascade" }),
+    limitAmount: numeric("limit_amount", { precision: 14, scale: 2 }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("budget_template_user_cat_uq").on(t.userId, t.categoryId)],
 );
 
 export const goals = pgTable(
