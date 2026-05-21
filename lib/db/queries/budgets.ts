@@ -1,8 +1,9 @@
 import "server-only";
 import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { budgets, categories, transactions } from "@/lib/db/schema";
-import type { BudgetRow, BudgetSummary } from "@/types/budget";
+import { budgets, budgetTemplates, categories, transactions } from "@/lib/db/schema";
+import { monthEndFromStart } from "@/lib/date";
+import type { BudgetRow, BudgetScope, BudgetSummary } from "@/types/budget";
 
 function statusFor(percent: number): BudgetRow["status"] {
   if (percent >= 100) return "exceeded";
@@ -10,34 +11,28 @@ function statusFor(percent: number): BudgetRow["status"] {
   return "ok";
 }
 
-/**
- * Lista budgets do usuário pro mês, com spent calculado.
- *
- * - Se a categoria do budget é mãe (não tem parentId), spent inclui a própria
- *   + todas as subcategorias dela.
- * - Se é subcategoria, spent inclui só ela.
- * - Despesas em BRL apenas. Outras moedas ficam pra V2.
- */
-export async function getBudgetsForMonth(
-  userId: string,
-  monthIso: string,
-): Promise<BudgetRow[]> {
-  // 1. Pega budgets do mês
+type CategoryMeta = {
+  name: string;
+  parentId: string | null;
+  parentName: string | null;
+};
+
+/** Carrega nome/parent das categorias informadas + nome dos parents. */
+async function loadCategoryMeta(
+  categoryIds: string[],
+): Promise<Map<string, CategoryMeta>> {
+  const meta = new Map<string, CategoryMeta>();
+  if (categoryIds.length === 0) return meta;
+
   const rows = await db
     .select({
-      id: budgets.id,
-      categoryId: budgets.categoryId,
-      limit: budgets.limitAmount,
+      id: categories.id,
       name: categories.name,
       parentId: categories.parentId,
     })
-    .from(budgets)
-    .innerJoin(categories, eq(categories.id, budgets.categoryId))
-    .where(and(eq(budgets.userId, userId), eq(budgets.month, monthIso)));
+    .from(categories)
+    .where(inArray(categories.id, categoryIds));
 
-  if (rows.length === 0) return [];
-
-  // 2. Mapeia parent name (se a categoria é sub)
   const parentIds = Array.from(
     new Set(rows.map((r) => r.parentId).filter((v): v is string => v !== null)),
   );
@@ -49,14 +44,58 @@ export async function getBudgetsForMonth(
     : [];
   const parentNameById = new Map(parentRows.map((p) => [p.id, p.name]));
 
-  // 3. Pra cada budget, calcula spent.
-  //    Pra mãe: incluir descendentes (parent_id = budget.categoryId OR id = budget.categoryId).
-  //    Pra sub: só ela mesma.
-  const monthEnd = `${monthIso.slice(0, 7)}-31`; // basta ser >= último dia do mês
-  const items: BudgetRow[] = [];
+  for (const r of rows) {
+    meta.set(r.id, {
+      name: r.name,
+      parentId: r.parentId,
+      parentName: r.parentId ? parentNameById.get(r.parentId) ?? null : null,
+    });
+  }
+  return meta;
+}
 
-  // Pré-busca todas as subcategorias dos parents dos budgets em uma query só
-  const motherIds = rows.filter((r) => r.parentId === null).map((r) => r.categoryId);
+/**
+ * Lista o orçamento efetivo de cada categoria pro mês.
+ *
+ * Resolução por categoria: override (budget do mês) tem prioridade sobre o
+ * template (budget_template, recorrente). Spent inclui descendentes quando a
+ * categoria é mãe. Despesas em BRL apenas.
+ */
+export async function getBudgetsForMonth(
+  userId: string,
+  monthIso: string,
+): Promise<BudgetRow[]> {
+  const [templates, overrides] = await Promise.all([
+    db
+      .select({
+        id: budgetTemplates.id,
+        categoryId: budgetTemplates.categoryId,
+        limit: budgetTemplates.limitAmount,
+      })
+      .from(budgetTemplates)
+      .where(eq(budgetTemplates.userId, userId)),
+    db
+      .select({
+        id: budgets.id,
+        categoryId: budgets.categoryId,
+        limit: budgets.limitAmount,
+      })
+      .from(budgets)
+      .where(and(eq(budgets.userId, userId), eq(budgets.month, monthIso))),
+  ]);
+
+  const templateByCat = new Map(templates.map((t) => [t.categoryId, t]));
+  const overrideByCat = new Map(overrides.map((o) => [o.categoryId, o]));
+
+  const categoryIds = Array.from(
+    new Set([...templateByCat.keys(), ...overrideByCat.keys()]),
+  );
+  if (categoryIds.length === 0) return [];
+
+  const meta = await loadCategoryMeta(categoryIds);
+
+  // Pré-busca subcategorias das categorias-mãe (pra somar spent dos descendentes).
+  const motherIds = categoryIds.filter((id) => meta.get(id)?.parentId == null);
   const childrenByMother = new Map<string, string[]>();
   if (motherIds.length) {
     const children = await db
@@ -76,17 +115,26 @@ export async function getBudgetsForMonth(
     }
   }
 
-  // Agora soma despesas pra cada budget
-  for (const r of rows) {
-    const isParent = r.parentId === null;
+  const monthEnd = monthEndFromStart(monthIso);
+  const items: BudgetRow[] = [];
+
+  for (const categoryId of categoryIds) {
+    const m = meta.get(categoryId);
+    if (!m) continue;
+    const isParent = m.parentId == null;
+    const template = templateByCat.get(categoryId);
+    const override = overrideByCat.get(categoryId);
+
+    const templateLimit = template ? Number(template.limit) : null;
+    const source: BudgetScope = override ? "month" : "template";
+    const limit = override ? Number(override.limit) : (templateLimit ?? 0);
+
     const includedCategoryIds = isParent
-      ? [r.categoryId, ...(childrenByMother.get(r.categoryId) ?? [])]
-      : [r.categoryId];
+      ? [categoryId, ...(childrenByMother.get(categoryId) ?? [])]
+      : [categoryId];
 
     const [spentRow] = await db
-      .select({
-        total: sql<string>`coalesce(sum(${transactions.amount}), 0)`,
-      })
+      .select({ total: sql<string>`coalesce(sum(${transactions.amount}), 0)` })
       .from(transactions)
       .where(
         and(
@@ -99,26 +147,27 @@ export async function getBudgetsForMonth(
         ),
       );
 
-    const limit = Number(r.limit);
     const spent = Number(spentRow?.total ?? 0);
     const remaining = limit - spent;
     const percent = limit === 0 ? 0 : (spent / limit) * 100;
 
     items.push({
-      id: r.id,
-      categoryId: r.categoryId,
-      categoryName: r.name,
-      categoryParentName: r.parentId ? parentNameById.get(r.parentId) ?? null : null,
+      categoryId,
+      categoryName: m.name,
+      categoryParentName: m.parentName,
       isParent,
       limit,
       spent,
       remaining,
       percent,
       status: statusFor(percent),
+      source,
+      templateLimit,
+      templateId: template?.id ?? null,
+      overrideId: override?.id ?? null,
     });
   }
 
-  // Ordena por status (exceeded primeiro), depois alfabético
   items.sort((a, b) => {
     const order = { exceeded: 0, warning: 1, ok: 2 } as const;
     if (order[a.status] !== order[b.status]) return order[a.status] - order[b.status];
@@ -142,25 +191,25 @@ export async function getMonthlyBudgetSummary(
 
 /**
  * Detecta overlap mãe↔subcategoria pra evitar double-counting.
+ *
+ * - Salvando template (monthIso null): conflita se mãe/sub tem template ou
+ *   qualquer override.
+ * - Salvando override num mês: conflita se mãe/sub tem template ou override
+ *   no mesmo mês.
+ *
  * Retorna a categoria conflitante, ou null se OK.
  */
 export async function findBudgetOverlap(
   userId: string,
   categoryId: string,
-  monthIso: string,
-  excludeBudgetId?: string,
+  monthIso: string | null,
 ): Promise<{ conflictCategoryName: string } | null> {
-  // 1. Busca a categoria-alvo
   const [target] = await db
-    .select({ id: categories.id, name: categories.name, parentId: categories.parentId })
+    .select({ id: categories.id, parentId: categories.parentId })
     .from(categories)
     .where(eq(categories.id, categoryId));
-
   if (!target) return null;
 
-  // 2. Coleta IDs conflitantes
-  // - Se target é mãe (parentId null): conflitam todos as subs dela
-  // - Se target é sub (parentId !== null): conflita a mãe dela
   let conflictIds: string[];
   if (target.parentId === null) {
     const subs = await db
@@ -171,28 +220,38 @@ export async function findBudgetOverlap(
   } else {
     conflictIds = [target.parentId];
   }
-
   if (conflictIds.length === 0) return null;
 
-  // 3. Verifica se algum desses tem budget no mesmo mês
-  const conflicts = await db
-    .select({
-      budgetId: budgets.id,
-      categoryName: categories.name,
-    })
-    .from(budgets)
-    .innerJoin(categories, eq(categories.id, budgets.categoryId))
+  const templateConflicts = await db
+    .select({ name: categories.name })
+    .from(budgetTemplates)
+    .innerJoin(categories, eq(categories.id, budgetTemplates.categoryId))
     .where(
       and(
+        eq(budgetTemplates.userId, userId),
+        inArray(budgetTemplates.categoryId, conflictIds),
+      ),
+    );
+  if (templateConflicts[0]) {
+    return { conflictCategoryName: templateConflicts[0].name };
+  }
+
+  const overrideWhere = monthIso
+    ? and(
         eq(budgets.userId, userId),
         eq(budgets.month, monthIso),
         inArray(budgets.categoryId, conflictIds),
-      ),
-    );
+      )
+    : and(eq(budgets.userId, userId), inArray(budgets.categoryId, conflictIds));
 
-  const realConflict = excludeBudgetId
-    ? conflicts.find((c) => c.budgetId !== excludeBudgetId)
-    : conflicts[0];
+  const overrideConflicts = await db
+    .select({ name: categories.name })
+    .from(budgets)
+    .innerJoin(categories, eq(categories.id, budgets.categoryId))
+    .where(overrideWhere);
+  if (overrideConflicts[0]) {
+    return { conflictCategoryName: overrideConflicts[0].name };
+  }
 
-  return realConflict ? { conflictCategoryName: realConflict.categoryName } : null;
+  return null;
 }

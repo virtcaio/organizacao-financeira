@@ -11,6 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { BudgetSummaryCards } from "@/components/orcamento/budget-summary";
 import { BudgetProgressBar } from "@/components/orcamento/budget-progress-bar";
@@ -102,10 +103,21 @@ export default async function OrcamentoPage({
             </TableHeader>
             <TableBody>
               {rows.map((b) => (
-                <TableRow key={b.id}>
+                <TableRow key={b.categoryId}>
                   <TableCell className="font-medium">
-                    <div className="flex flex-col">
-                      <span>{b.categoryName}</span>
+                    <div className="flex flex-col gap-1">
+                      <span className="flex items-center gap-2">
+                        {b.categoryName}
+                        {b.source === "month" ? (
+                          <Badge variant="secondary" className="text-xs font-normal">
+                            Ajuste deste mês
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-xs font-normal">
+                            Padrão
+                          </Badge>
+                        )}
+                      </span>
                       {b.categoryParentName ? (
                         <span className="text-xs text-muted-foreground">
                           {b.categoryParentName}
@@ -136,15 +148,18 @@ export default async function OrcamentoPage({
                     {formatCurrency(b.spent, "BRL")}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {formatCurrency(b.limit, "BRL")}
+                    <div className="flex flex-col">
+                      <span>{formatCurrency(b.limit, "BRL")}</span>
+                      {b.source === "month" && b.templateLimit != null ? (
+                        <span className="text-xs text-muted-foreground">
+                          padrão {formatCurrency(b.templateLimit, "BRL")}
+                        </span>
+                      ) : null}
+                    </div>
                   </TableCell>
                   <TableCell>
                     <BudgetRowActions
-                      budget={{
-                        id: b.id,
-                        categoryId: b.categoryId,
-                        limit: b.limit.toFixed(2),
-                      }}
+                      row={b}
                       month={month}
                       monthLabel={label}
                       categories={categories}
