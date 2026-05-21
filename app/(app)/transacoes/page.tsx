@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { ArrowLeftRightIcon } from "lucide-react";
 import { NewTransactionButton } from "@/components/transacoes/new-transaction-button";
 import { NewTransferButton } from "@/components/transacoes/new-transfer-button";
+import { ReceiptCaptureButton } from "@/components/transacoes/receipt-capture-button";
 import { TransactionRowActions } from "@/components/transacoes/transaction-row-actions";
 import { TransferRowActions } from "@/components/transacoes/transfer-row-actions";
 import { TransactionTagFilter } from "@/components/transacoes/transaction-tag-filter";
@@ -92,8 +93,15 @@ export default async function TransacoesPage({
             Receitas, despesas e transferências registradas.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <TransactionTagFilter tags={tags} selectedTagId={filterTagId} />
+          {hasAccount ? (
+            <ReceiptCaptureButton
+              accounts={accounts}
+              categories={categories}
+              tags={tags}
+            />
+          ) : null}
           {canTransfer ? <NewTransferButton accounts={accounts} /> : null}
           {hasAccount ? (
             <NewTransactionButton
