@@ -22,40 +22,31 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { deleteTransactionAction } from "@/lib/actions/transactions";
+import { deleteTransferAction } from "@/lib/actions/transactions";
 import { LOADING_TEXT } from "@/lib/ui-text";
-import {
-  TransactionFormDialog,
-  type AccountOption,
-  type TransactionDraft,
-} from "./transaction-form-dialog";
-import type { CategoryNode } from "@/lib/db/queries/categories";
-import type { Tag } from "@/types/tag";
+import { TransferFormDialog, type TransferDraft } from "./transfer-form-dialog";
+import type { AccountOption } from "./transaction-form-dialog";
 
-export function TransactionRowActions({
-  transaction,
+export function TransferRowActions({
+  transfer,
   accounts,
-  categories,
-  tags,
 }: {
-  transaction: TransactionDraft;
+  transfer: TransferDraft;
   accounts: AccountOption[];
-  categories: CategoryNode[];
-  tags: Tag[];
 }) {
   const router = useRouter();
+  const [isPending, startTransition] = useTransition();
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [isPending, startTransition] = useTransition();
 
   function onConfirmDelete() {
     startTransition(async () => {
-      const res = await deleteTransactionAction(transaction.id);
+      const res = await deleteTransferAction(transfer.lineId);
       if (!res.ok) {
         toast.error(res.error);
         return;
       }
-      toast.success("Transação excluída");
+      toast.success("Transferência excluída");
       setDeleteOpen(false);
       router.refresh();
     });
@@ -86,31 +77,28 @@ export function TransactionRowActions({
         </DropdownMenu>
       </div>
 
-      <TransactionFormDialog
+      <TransferFormDialog
         open={editOpen}
         onOpenChange={setEditOpen}
         accounts={accounts}
-        categories={categories}
-        tags={tags}
-        transaction={transaction}
+        transfer={transfer}
       />
 
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Excluir transação?</AlertDialogTitle>
+            <AlertDialogTitle>Excluir transferência?</AlertDialogTitle>
             <AlertDialogDescription>
-              Essa ação não pode ser desfeita. A transação será removida permanentemente.
+              As duas linhas (saída e entrada) serão removidas. Esta ação não
+              pode ser desfeita.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isPending}>Cancelar</AlertDialogCancel>
             <AlertDialogAction
-              onClick={(e) => {
-                e.preventDefault();
-                onConfirmDelete();
-              }}
+              onClick={onConfirmDelete}
               disabled={isPending}
+              className="bg-destructive text-white hover:bg-destructive/90"
             >
               {isPending ? LOADING_TEXT.delete : "Excluir"}
             </AlertDialogAction>

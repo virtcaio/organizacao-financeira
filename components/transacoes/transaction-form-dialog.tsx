@@ -37,6 +37,8 @@ import {
   type TransactionType,
 } from "@/types/transaction";
 import type { CategoryNode } from "@/lib/db/queries/categories";
+import type { Tag } from "@/types/tag";
+import { TagMultiSelect } from "./tag-multi-select";
 
 export type AccountOption = {
   id: string;
@@ -55,6 +57,7 @@ export type TransactionDraft = {
   date: string;
   description: string;
   notes: string | null;
+  tagIds: string[];
 };
 
 type Props = {
@@ -62,6 +65,7 @@ type Props = {
   onOpenChange: (open: boolean) => void;
   accounts: AccountOption[];
   categories: CategoryNode[];
+  tags: Tag[];
   transaction?: TransactionDraft;
 };
 
@@ -70,6 +74,7 @@ export function TransactionFormDialog({
   onOpenChange,
   accounts,
   categories,
+  tags,
   transaction,
 }: Props) {
   const router = useRouter();
@@ -79,6 +84,9 @@ export function TransactionFormDialog({
   const [type, setType] = useState<TransactionType>(transaction?.type ?? "expense");
   const [accountId, setAccountId] = useState<string>(
     transaction?.financialAccountId ?? accounts[0]?.id ?? "",
+  );
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>(
+    transaction?.tagIds ?? [],
   );
 
   const selectedAccount = accounts.find((a) => a.id === accountId);
@@ -113,6 +121,7 @@ export function TransactionFormDialog({
       date: String(form.get("date") || todayIso()),
       description: String(form.get("description") || ""),
       notes: String(form.get("notes") || ""),
+      tagIds: selectedTagIds,
     };
 
     startTransition(async () => {
@@ -280,6 +289,16 @@ export function TransactionFormDialog({
               name="notes"
               rows={2}
               defaultValue={transaction?.notes ?? ""}
+              disabled={isPending}
+            />
+          </div>
+
+          <div className="grid gap-2">
+            <Label>Tags (opcional)</Label>
+            <TagMultiSelect
+              allTags={tags}
+              selectedIds={selectedTagIds}
+              onChange={setSelectedTagIds}
               disabled={isPending}
             />
           </div>
