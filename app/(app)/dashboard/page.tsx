@@ -5,6 +5,7 @@ import { KpiCards } from "@/components/dashboard/kpi-cards";
 import { CategoryBreakdown } from "@/components/dashboard/category-breakdown";
 import { MonthlyEvolution } from "@/components/dashboard/monthly-evolution";
 import { RecentTransactions } from "@/components/dashboard/recent-transactions";
+import { UpcomingRecurring } from "@/components/dashboard/upcoming-recurring";
 import {
   getBalancesByCurrency,
   getCategoryBreakdownBRL,
@@ -12,6 +13,7 @@ import {
   getMonthlyKpisBRL,
   getRecentTransactions,
 } from "@/lib/db/queries/dashboard";
+import { getUpcomingRules } from "@/lib/db/queries/recurring";
 import { listFinancialAccountsAction } from "@/lib/actions/financial-accounts";
 import { requireUserId } from "@/lib/auth-helpers";
 import { auth } from "@/lib/auth";
@@ -23,14 +25,16 @@ export default async function DashboardPage() {
   const session = await auth();
   const now = new Date();
 
-  const [accounts, balances, kpis, breakdown, evolution, recent] = await Promise.all([
-    listFinancialAccountsAction(),
-    getBalancesByCurrency(userId),
-    getMonthlyKpisBRL(userId, now),
-    getCategoryBreakdownBRL(userId, now),
-    getMonthlyEvolutionBRL(userId, 6, now),
-    getRecentTransactions(userId, 5),
-  ]);
+  const [accounts, balances, kpis, breakdown, evolution, recent, upcoming] =
+    await Promise.all([
+      listFinancialAccountsAction(),
+      getBalancesByCurrency(userId),
+      getMonthlyKpisBRL(userId, now),
+      getCategoryBreakdownBRL(userId, now),
+      getMonthlyEvolutionBRL(userId, 6, now),
+      getRecentTransactions(userId, 5),
+      getUpcomingRules(userId, 14),
+    ]);
 
   const hasAccount = accounts.some((a) => !a.archived);
 
@@ -56,7 +60,10 @@ export default async function DashboardPage() {
         <MonthlyEvolution data={evolution} />
       </div>
 
-      <RecentTransactions transactions={recent} />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <RecentTransactions transactions={recent} />
+        <UpcomingRecurring rules={upcoming} />
+      </div>
     </div>
   );
 }
