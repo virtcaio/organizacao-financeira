@@ -8,14 +8,17 @@ import {
   type AccountOption,
 } from "./transaction-form-dialog";
 import type { CategoryNode } from "@/lib/db/queries/categories";
+import type { Tag } from "@/types/tag";
 
 export function NewTransactionButton({
   accounts,
   categories,
+  tags,
   disabled,
 }: {
   accounts: AccountOption[];
   categories: CategoryNode[];
+  tags: Tag[];
   disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -30,6 +33,7 @@ export function NewTransactionButton({
         onOpenChange={setOpen}
         accounts={accounts}
         categories={categories}
+        tags={tags}
       />
     </>
   );
