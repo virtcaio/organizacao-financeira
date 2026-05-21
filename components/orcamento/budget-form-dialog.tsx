@@ -26,11 +26,15 @@ import {
 } from "@/components/ui/select";
 import { upsertBudgetAction } from "@/lib/actions/budgets";
 import { LOADING_TEXT } from "@/lib/ui-text";
+import { cn } from "@/lib/utils";
+import type { BudgetScope } from "@/types/budget";
 import type { CategoryNode } from "@/lib/db/queries/categories";
 
-export type BudgetDraft = {
-  id?: string;
+/** Edição: categoria + escopo fixos. Criação: ambos livres. */
+export type BudgetPreset = {
   categoryId: string;
+  categoryLabel: string;
+  scope: BudgetScope;
   limit: string;
 };
 
@@ -38,9 +42,9 @@ type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   month: string; // YYYY-MM-01
-  monthLabel: string; // pra título do dialog
+  monthLabel: string;
   categories: CategoryNode[];
-  budget?: BudgetDraft;
+  preset?: BudgetPreset;
 };
 
 export function BudgetFormDialog({
@@ -49,16 +53,16 @@ export function BudgetFormDialog({
   month,
   monthLabel,
   categories,
-  budget,
+  preset,
 }: Props) {
   const router = useRouter();
-  const isEdit = !!budget?.id;
-  const [categoryId, setCategoryId] = useState<string>(budget?.categoryId ?? "");
-  const [limit, setLimit] = useState<string>(budget?.limit ?? "");
+  const isEdit = !!preset;
+  const [categoryId, setCategoryId] = useState(preset?.categoryId ?? "");
+  const [scope, setScope] = useState<BudgetScope>(preset?.scope ?? "template");
+  const [limit, setLimit] = useState(preset?.limit ?? "");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isPending, startTransition] = useTransition();
 
-  // Só categorias de despesa fazem sentido pra orçamento
   const expenseCategories = useMemo(
     () => categories.filter((c) => c.kind === "expense"),
     [categories],
@@ -78,14 +82,13 @@ export function BudgetFormDialog({
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setErrors({});
-    const input = {
-      categoryId,
-      month,
-      limit: limit.trim(),
-    };
-
     startTransition(async () => {
-      const res = await upsertBudgetAction(input);
+      const res = await upsertBudgetAction({
+        categoryId,
+        limit: limit.trim(),
+        scope,
+        month: scope === "month" ? month : undefined,
+      });
       if (!res.ok) {
         if (res.fieldErrors) setErrors(res.fieldErrors);
         toast.error(res.error);
@@ -102,58 +105,85 @@ export function BudgetFormDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>
-            {isEdit ? "Editar orçamento" : "Novo orçamento"}
+            {isEdit
+              ? scope === "template"
+                ? "Editar orçamento padrão"
+                : `Editar ajuste de ${monthLabel}`
+              : "Novo orçamento"}
           </DialogTitle>
           <DialogDescription>
-            Defina um limite mensal por categoria — {monthLabel}.
+            {scope === "template"
+              ? "O limite padrão vale para todos os meses, salvo ajuste pontual."
+              : `Ajuste só para ${monthLabel}. Outros meses seguem o padrão.`}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={onSubmit} className="grid gap-4" noValidate>
           <div className="grid gap-2">
             <Label htmlFor="categoryId">Categoria</Label>
-            <Select
-              value={categoryId}
-              onValueChange={(v) => setCategoryId(v ?? "")}
-              disabled={isPending || isEdit}
-            >
-              <SelectTrigger id="categoryId" className="w-full">
-                <SelectValue placeholder="Selecione a categoria">
-                  {(v: string) => categoryLabelById.get(v) ?? "Selecione"}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {expenseCategories.length === 0 ? (
-                  <div className="px-3 py-2 text-xs text-muted-foreground">
-                    Nenhuma categoria de despesa.
-                  </div>
-                ) : (
-                  expenseCategories.map((parent) => (
-                    <SelectGroup key={parent.id}>
-                      <SelectLabel>
-                        {parent.icon ? `${parent.icon} ` : ""}
-                        {parent.name}
-                      </SelectLabel>
-                      <SelectItem value={parent.id}>
-                        {parent.name} (toda)
-                      </SelectItem>
-                      {parent.children.map((child) => (
-                        <SelectItem key={child.id} value={child.id}>
-                          {child.name}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  ))
-                )}
-              </SelectContent>
-            </Select>
-            {errors.categoryId ? <FieldError msg={errors.categoryId} /> : null}
             {isEdit ? (
-              <p className="text-xs text-muted-foreground">
-                Pra mudar de categoria, exclua e crie um novo orçamento.
-              </p>
-            ) : null}
+              <Input value={preset!.categoryLabel} disabled readOnly />
+            ) : (
+              <Select
+                value={categoryId}
+                onValueChange={(v) => setCategoryId(v ?? "")}
+                disabled={isPending}
+              >
+                <SelectTrigger id="categoryId" className="w-full">
+                  <SelectValue placeholder="Selecione a categoria">
+                    {(v: string) => categoryLabelById.get(v) ?? "Selecione"}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {expenseCategories.length === 0 ? (
+                    <div className="px-3 py-2 text-xs text-muted-foreground">
+                      Nenhuma categoria de despesa.
+                    </div>
+                  ) : (
+                    expenseCategories.map((parent) => (
+                      <SelectGroup key={parent.id}>
+                        <SelectLabel>
+                          {parent.icon ? `${parent.icon} ` : ""}
+                          {parent.name}
+                        </SelectLabel>
+                        <SelectItem value={parent.id}>
+                          {parent.name} (toda)
+                        </SelectItem>
+                        {parent.children.map((child) => (
+                          <SelectItem key={child.id} value={child.id}>
+                            {child.name}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            )}
+            {errors.categoryId ? <FieldError msg={errors.categoryId} /> : null}
           </div>
+
+          {!isEdit ? (
+            <div className="grid gap-2">
+              <Label>Aplicar a</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <ScopeButton
+                  active={scope === "template"}
+                  onClick={() => setScope("template")}
+                  disabled={isPending}
+                  title="Todo mês"
+                  hint="Limite padrão"
+                />
+                <ScopeButton
+                  active={scope === "month"}
+                  onClick={() => setScope("month")}
+                  disabled={isPending}
+                  title={`Apenas ${monthLabel}`}
+                  hint="Ajuste pontual"
+                />
+              </div>
+            </div>
+          ) : null}
 
           <div className="grid gap-2">
             <Label htmlFor="limit">Limite mensal (R$)</Label>
@@ -169,6 +199,7 @@ export function BudgetFormDialog({
               disabled={isPending}
             />
             {errors.limit ? <FieldError msg={errors.limit} /> : null}
+            {errors.month ? <FieldError msg={errors.month} /> : null}
           </div>
 
           <DialogFooter className="gap-2 sm:gap-0">
@@ -186,6 +217,38 @@ export function BudgetFormDialog({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function ScopeButton({
+  active,
+  onClick,
+  disabled,
+  title,
+  hint,
+}: {
+  active: boolean;
+  onClick: () => void;
+  disabled?: boolean;
+  title: string;
+  hint: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-pressed={active}
+      className={cn(
+        "flex flex-col items-start rounded-lg border p-3 text-left transition-colors",
+        active
+          ? "border-primary bg-primary/5"
+          : "border-input hover:bg-accent",
+      )}
+    >
+      <span className="text-sm font-medium">{title}</span>
+      <span className="text-xs text-muted-foreground">{hint}</span>
+    </button>
   );
 }
 
