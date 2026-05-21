@@ -2,6 +2,7 @@ import "server-only";
 import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { budgets, budgetTemplates, categories, transactions } from "@/lib/db/schema";
+import { monthEndFromStart } from "@/lib/date";
 import type { BudgetRow, BudgetScope, BudgetSummary } from "@/types/budget";
 
 function statusFor(percent: number): BudgetRow["status"] {
@@ -114,7 +115,7 @@ export async function getBudgetsForMonth(
     }
   }
 
-  const monthEnd = `${monthIso.slice(0, 7)}-31`;
+  const monthEnd = monthEndFromStart(monthIso);
   const items: BudgetRow[] = [];
 
   for (const categoryId of categoryIds) {

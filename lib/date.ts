@@ -38,6 +38,15 @@ export function monthEndIso(at: Date = new Date()): string {
   return `${today.slice(0, 7)}-${String(lastDay).padStart(2, "0")}`;
 }
 
+/** Último dia (YYYY-MM-DD) do mês cujo primeiro dia é `monthStart` (YYYY-MM-01). */
+export function monthEndFromStart(monthStart: string): string {
+  const year = Number(monthStart.slice(0, 4));
+  const month = Number(monthStart.slice(5, 7));
+  // Date.UTC(year, month, 0) = último dia do mês `month` (1-based aqui).
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return `${monthStart.slice(0, 7)}-${String(lastDay).padStart(2, "0")}`;
+}
+
 /** Primeiro dia do mês N meses antes do mês contendo `at`. */
 export function monthStartIsoBack(monthsBack: number, at: Date = new Date()): string {
   const today = todayIso(at);
