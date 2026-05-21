@@ -7,6 +7,7 @@ import {
   WalletIcon,
   ArrowLeftRightIcon,
   PiggyBankIcon,
+  RepeatIcon,
   TargetIcon,
   TrendingUpIcon,
   SparklesIcon,
@@ -34,6 +35,7 @@ const PRIMARY_ITEMS: NavMainItem[] = [
   { title: "Dashboard", url: "/dashboard", icon: <LayoutDashboardIcon /> },
   { title: "Contas", url: "/contas", icon: <WalletIcon /> },
   { title: "Transações", url: "/transacoes", icon: <ArrowLeftRightIcon /> },
+  { title: "Recorrências", url: "/recorrencias", icon: <RepeatIcon /> },
   { title: "Importar", url: "/importar", icon: <UploadIcon /> },
   { title: "Orçamento", url: "/orcamento", icon: <PiggyBankIcon /> },
 ];
