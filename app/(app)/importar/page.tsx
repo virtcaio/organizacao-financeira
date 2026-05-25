@@ -1,4 +1,4 @@
-import { ImportPdfFlow } from "@/components/importar/import-pdf-flow";
+import { ImportHub } from "@/components/importar/import-hub";
 import { listAccountsForPickerAction } from "@/lib/actions/transactions";
 import { listCategoriesForUser } from "@/lib/db/queries/categories";
 import { requireUserId } from "@/lib/auth-helpers";
@@ -12,5 +12,5 @@ export default async function ImportarPage() {
     listCategoriesForUser(userId),
   ]);
 
-  return <ImportPdfFlow accounts={accounts} categories={categories} />;
+  return <ImportHub accounts={accounts} categories={categories} />;
 }

@@ -445,12 +445,14 @@ export type BulkTransactionInput = {
   installmentSeq?: number | null;
   installmentTotal?: number | null;
   installmentGroupId?: string | null;
-  source?: "manual" | "photo" | "csv" | "pdf";
+  source?: "manual" | "photo" | "csv" | "pdf" | "ofx";
+  /** ID externo da transação (ex: FITID do OFX) — usado para dedup. */
+  sourceRef?: string | null;
 };
 
 export async function createTransactionsBulkAction(
   rows: BulkTransactionInput[],
-): Promise<ActionResult<{ inserted: number }>> {
+): Promise<ActionResult<{ inserted: number; skipped: number }>> {
   const userId = await requireUserId();
   if (!Array.isArray(rows) || rows.length === 0) {
     return { ok: false, error: "Nada para importar." };
@@ -489,27 +491,69 @@ export async function createTransactionsBulkAction(
     }
   }
 
-  await db.insert(transactions).values(
-    rows.map((r) => ({
-      userId,
-      financialAccountId: r.financialAccountId,
-      categoryId: r.categoryId ?? null,
-      type: r.type,
-      amount: r.amount,
-      currency: r.currency,
-      date: r.date,
-      description: r.description,
-      notes: r.notes ?? null,
-      source: r.source ?? "pdf",
-      installmentSeq: r.installmentSeq ?? null,
-      installmentTotal: r.installmentTotal ?? null,
-      installmentGroupId: r.installmentGroupId ?? null,
-    })),
-  );
+  // Dedup: pra linhas com sourceRef, checa se já existe (userId, account,
+  // source, sourceRef). Linhas sem sourceRef passam sempre.
+  const refsToCheck = rows
+    .filter((r): r is BulkTransactionInput & { sourceRef: string } => !!r.sourceRef)
+    .map((r) => ({
+      accountId: r.financialAccountId,
+      source: (r.source ?? "pdf") as string,
+      sourceRef: r.sourceRef,
+    }));
+  const existingKeys = new Set<string>();
+  if (refsToCheck.length > 0) {
+    const refsOnly = refsToCheck.map((r) => r.sourceRef);
+    const existing = await db
+      .select({
+        accountId: transactions.financialAccountId,
+        source: transactions.source,
+        sourceRef: transactions.sourceRef,
+      })
+      .from(transactions)
+      .where(
+        and(
+          eq(transactions.userId, userId),
+          inArray(transactions.sourceRef, refsOnly),
+        ),
+      );
+    for (const e of existing) {
+      if (e.sourceRef) {
+        existingKeys.add(`${e.accountId}|${e.source}|${e.sourceRef}`);
+      }
+    }
+  }
+
+  const toInsert = rows.filter((r) => {
+    if (!r.sourceRef) return true;
+    const key = `${r.financialAccountId}|${r.source ?? "pdf"}|${r.sourceRef}`;
+    return !existingKeys.has(key);
+  });
+  const skipped = rows.length - toInsert.length;
+
+  if (toInsert.length > 0) {
+    await db.insert(transactions).values(
+      toInsert.map((r) => ({
+        userId,
+        financialAccountId: r.financialAccountId,
+        categoryId: r.categoryId ?? null,
+        type: r.type,
+        amount: r.amount,
+        currency: r.currency,
+        date: r.date,
+        description: r.description,
+        notes: r.notes ?? null,
+        source: r.source ?? "pdf",
+        sourceRef: r.sourceRef ?? null,
+        installmentSeq: r.installmentSeq ?? null,
+        installmentTotal: r.installmentTotal ?? null,
+        installmentGroupId: r.installmentGroupId ?? null,
+      })),
+    );
+  }
 
   revalidatePath("/transacoes");
   revalidatePath("/dashboard");
-  return { ok: true, data: { inserted: rows.length } };
+  return { ok: true, data: { inserted: toInsert.length, skipped } };
 }
 
 export async function listAccountsForPickerAction() {

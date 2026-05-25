@@ -46,3 +46,16 @@ export const ocrReceiptOutputSchema = z.object({
 });
 
 export type OcrReceiptOutput = z.infer<typeof ocrReceiptOutputSchema>;
+
+/** Schema do output da IA ao categorizar uma lista de transações importadas. */
+export const categorizeImportedOutputSchema = z.object({
+  suggestions: z.array(
+    z.object({
+      id: z.string().min(1),
+      category_id: z.string().uuid().nullable(),
+      category_name: z.string().nullable(),
+    }),
+  ),
+});
+
+export type CategorizeImportedOutput = z.infer<typeof categorizeImportedOutputSchema>;

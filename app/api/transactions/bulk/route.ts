@@ -3,7 +3,7 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { financialAccounts, transactions } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,7 +24,9 @@ const rowSchema = z.object({
   notes: z.string().trim().max(1000).nullable().optional(),
   installmentSeq: z.number().int().positive().nullable().optional(),
   installmentTotal: z.number().int().positive().nullable().optional(),
-  source: z.enum(["manual", "photo", "csv", "pdf"]).optional(),
+  source: z.enum(["manual", "photo", "csv", "pdf", "ofx"]).optional(),
+  /** ID externo (ex: FITID do OFX) — usado para dedup quando presente. */
+  sourceRef: z.string().trim().max(128).nullable().optional(),
 });
 
 const bodySchema = z.object({
@@ -74,9 +76,47 @@ export async function POST(req: Request) {
     }
   }
 
+  // Dedup: pra linhas com sourceRef, checa se já existe (userId, account,
+  // source, sourceRef). Linhas sem sourceRef passam sempre.
+  const refsOnly = rows
+    .map((r) => r.sourceRef)
+    .filter((v): v is string => !!v);
+  const existingKeys = new Set<string>();
+  if (refsOnly.length > 0) {
+    const existing = await db
+      .select({
+        accountId: transactions.financialAccountId,
+        source: transactions.source,
+        sourceRef: transactions.sourceRef,
+      })
+      .from(transactions)
+      .where(
+        and(
+          eq(transactions.userId, userId),
+          inArray(transactions.sourceRef, refsOnly),
+        ),
+      );
+    for (const e of existing) {
+      if (e.sourceRef) {
+        existingKeys.add(`${e.accountId}|${e.source}|${e.sourceRef}`);
+      }
+    }
+  }
+
+  const toInsert = rows.filter((r) => {
+    if (!r.sourceRef) return true;
+    const key = `${r.financialAccountId}|${r.source ?? "pdf"}|${r.sourceRef}`;
+    return !existingKeys.has(key);
+  });
+  const skipped = rows.length - toInsert.length;
+
+  if (toInsert.length === 0) {
+    return NextResponse.json({ ok: true, inserted: 0, skipped });
+  }
+
   try {
     await db.insert(transactions).values(
-      rows.map((r) => ({
+      toInsert.map((r) => ({
         userId,
         financialAccountId: r.financialAccountId,
         categoryId: r.categoryId ?? null,
@@ -87,6 +127,7 @@ export async function POST(req: Request) {
         description: r.description,
         notes: r.notes ?? null,
         source: r.source ?? "pdf",
+        sourceRef: r.sourceRef ?? null,
         installmentSeq: r.installmentSeq ?? null,
         installmentTotal: r.installmentTotal ?? null,
       })),
@@ -96,5 +137,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: msg }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true, inserted: rows.length });
+  return NextResponse.json({ ok: true, inserted: toInsert.length, skipped });
 }
