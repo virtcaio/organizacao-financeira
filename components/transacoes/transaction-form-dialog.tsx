@@ -58,6 +58,16 @@ export type TransactionDraft = {
   description: string;
   notes: string | null;
   tagIds: string[];
+  receiptKey: string | null;
+};
+
+/** Valores iniciais pra modo criação (ex: pré-preenchimento por OCR). */
+export type TransactionPrefill = {
+  type?: TransactionType;
+  amount?: string;
+  date?: string;
+  description?: string;
+  categoryId?: string;
 };
 
 type Props = {
@@ -67,6 +77,9 @@ type Props = {
   categories: CategoryNode[];
   tags: Tag[];
   transaction?: TransactionDraft;
+  prefill?: TransactionPrefill;
+  /** Comprovante anexado (key do Storage) — vindo do OCR ou de edição. */
+  receiptKey?: string;
 };
 
 export function TransactionFormDialog({
@@ -76,12 +89,16 @@ export function TransactionFormDialog({
   categories,
   tags,
   transaction,
+  prefill,
+  receiptKey,
 }: Props) {
   const router = useRouter();
   const isEdit = !!transaction;
   const [isPending, startTransition] = useTransition();
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [type, setType] = useState<TransactionType>(transaction?.type ?? "expense");
+  const [type, setType] = useState<TransactionType>(
+    transaction?.type ?? prefill?.type ?? "expense",
+  );
   const [accountId, setAccountId] = useState<string>(
     transaction?.financialAccountId ?? accounts[0]?.id ?? "",
   );
@@ -91,6 +108,11 @@ export function TransactionFormDialog({
 
   const selectedAccount = accounts.find((a) => a.id === accountId);
   const defaultCurrency = selectedAccount?.currency ?? "BRL";
+
+  const effectiveReceiptKey = receiptKey ?? transaction?.receiptKey ?? undefined;
+  const receiptSrc = effectiveReceiptKey
+    ? `/api/receipts/view?key=${encodeURIComponent(effectiveReceiptKey)}`
+    : null;
 
   const categoriesForType = useMemo(() => {
     return categories.filter((c) => c.kind === type);
@@ -122,6 +144,7 @@ export function TransactionFormDialog({
       description: String(form.get("description") || ""),
       notes: String(form.get("notes") || ""),
       tagIds: selectedTagIds,
+      receiptKey: effectiveReceiptKey,
     };
 
     startTransition(async () => {
@@ -150,6 +173,28 @@ export function TransactionFormDialog({
         </DialogHeader>
 
         <form onSubmit={onSubmit} className="grid gap-4" noValidate>
+          {receiptSrc ? (
+            <div className="grid gap-1.5">
+              <span className="text-xs font-medium text-muted-foreground">
+                Comprovante — confira os dados extraídos
+              </span>
+              <a
+                href={receiptSrc}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block overflow-hidden rounded-lg border bg-muted"
+                title="Abrir comprovante em tamanho real"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={receiptSrc}
+                  alt="Comprovante"
+                  className="max-h-56 w-full object-contain"
+                />
+              </a>
+            </div>
+          ) : null}
+
           <div className="grid grid-cols-2 gap-3">
             <div className="grid gap-2">
               <Label htmlFor="type">Tipo</Label>
@@ -179,7 +224,7 @@ export function TransactionFormDialog({
                 id="date"
                 name="date"
                 type="date"
-                defaultValue={transaction?.date ?? todayIso()}
+                defaultValue={transaction?.date ?? prefill?.date ?? todayIso()}
                 required
                 disabled={isPending}
               />
@@ -219,7 +264,7 @@ export function TransactionFormDialog({
               <Input
                 id="description"
                 name="description"
-                defaultValue={transaction?.description ?? ""}
+                defaultValue={transaction?.description ?? prefill?.description ?? ""}
                 placeholder="Supermercado Pão de Açúcar"
                 required
                 disabled={isPending}
@@ -232,7 +277,7 @@ export function TransactionFormDialog({
                 id="amount"
                 name="amount"
                 inputMode="decimal"
-                defaultValue={transaction?.amount ?? ""}
+                defaultValue={transaction?.amount ?? prefill?.amount ?? ""}
                 placeholder="0,00"
                 required
                 disabled={isPending}
@@ -245,7 +290,7 @@ export function TransactionFormDialog({
             <Label htmlFor="categoryId">Categoria</Label>
             <Select
               name="categoryId"
-              defaultValue={transaction?.categoryId ?? ""}
+              defaultValue={transaction?.categoryId ?? prefill?.categoryId ?? ""}
               disabled={isPending}
             >
               <SelectTrigger id="categoryId" className="w-full">

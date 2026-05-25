@@ -7,9 +7,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeftRightIcon } from "lucide-react";
+import { ArrowLeftRightIcon, PaperclipIcon } from "lucide-react";
 import { NewTransactionButton } from "@/components/transacoes/new-transaction-button";
 import { NewTransferButton } from "@/components/transacoes/new-transfer-button";
+import { ReceiptCaptureButton } from "@/components/transacoes/receipt-capture-button";
 import { TransactionRowActions } from "@/components/transacoes/transaction-row-actions";
 import { TransferRowActions } from "@/components/transacoes/transfer-row-actions";
 import { TransactionTagFilter } from "@/components/transacoes/transaction-tag-filter";
@@ -92,8 +93,15 @@ export default async function TransacoesPage({
             Receitas, despesas e transferências registradas.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <TransactionTagFilter tags={tags} selectedTagId={filterTagId} />
+          {hasAccount ? (
+            <ReceiptCaptureButton
+              accounts={accounts}
+              categories={categories}
+              tags={tags}
+            />
+          ) : null}
           {canTransfer ? <NewTransferButton accounts={accounts} /> : null}
           {hasAccount ? (
             <NewTransactionButton
@@ -164,6 +172,17 @@ export default async function TransacoesPage({
                             <ArrowLeftRightIcon className="size-3.5 text-transfer" />
                           ) : null}
                           {t.description}
+                          {t.receiptKey ? (
+                            <a
+                              href={`/api/receipts/view?key=${encodeURIComponent(t.receiptKey)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title="Ver comprovante"
+                              className="text-muted-foreground hover:text-foreground"
+                            >
+                              <PaperclipIcon className="size-3.5" />
+                            </a>
+                          ) : null}
                         </span>
                         {t.notes ? (
                           <span className="text-xs text-muted-foreground">{t.notes}</span>
@@ -221,6 +240,7 @@ export default async function TransacoesPage({
                             description: t.description,
                             notes: t.notes,
                             tagIds: t.tags.map((tag) => tag.id),
+                            receiptKey: t.receiptKey,
                           }}
                           accounts={accounts}
                           categories={categories}
