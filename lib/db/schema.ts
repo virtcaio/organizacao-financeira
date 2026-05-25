@@ -49,6 +49,7 @@ export const transactionSource = pgEnum("transaction_source", [
   "photo",
   "csv",
   "pdf",
+  "ofx",
   "recurring",
 ]);
 
