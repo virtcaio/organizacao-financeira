@@ -7,7 +7,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeftRightIcon } from "lucide-react";
+import { ArrowLeftRightIcon, PaperclipIcon } from "lucide-react";
 import { NewTransactionButton } from "@/components/transacoes/new-transaction-button";
 import { NewTransferButton } from "@/components/transacoes/new-transfer-button";
 import { ReceiptCaptureButton } from "@/components/transacoes/receipt-capture-button";
@@ -172,6 +172,17 @@ export default async function TransacoesPage({
                             <ArrowLeftRightIcon className="size-3.5 text-transfer" />
                           ) : null}
                           {t.description}
+                          {t.receiptKey ? (
+                            <a
+                              href={`/api/receipts/view?key=${encodeURIComponent(t.receiptKey)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title="Ver comprovante"
+                              className="text-muted-foreground hover:text-foreground"
+                            >
+                              <PaperclipIcon className="size-3.5" />
+                            </a>
+                          ) : null}
                         </span>
                         {t.notes ? (
                           <span className="text-xs text-muted-foreground">{t.notes}</span>
@@ -229,6 +240,7 @@ export default async function TransacoesPage({
                             description: t.description,
                             notes: t.notes,
                             tagIds: t.tags.map((tag) => tag.id),
+                            receiptKey: t.receiptKey,
                           }}
                           accounts={accounts}
                           categories={categories}

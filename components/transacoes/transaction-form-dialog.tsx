@@ -58,6 +58,7 @@ export type TransactionDraft = {
   description: string;
   notes: string | null;
   tagIds: string[];
+  receiptKey: string | null;
 };
 
 /** Valores iniciais pra modo criação (ex: pré-preenchimento por OCR). */
@@ -77,6 +78,8 @@ type Props = {
   tags: Tag[];
   transaction?: TransactionDraft;
   prefill?: TransactionPrefill;
+  /** Comprovante anexado (key do Storage) — vindo do OCR ou de edição. */
+  receiptKey?: string;
 };
 
 export function TransactionFormDialog({
@@ -87,6 +90,7 @@ export function TransactionFormDialog({
   tags,
   transaction,
   prefill,
+  receiptKey,
 }: Props) {
   const router = useRouter();
   const isEdit = !!transaction;
@@ -104,6 +108,11 @@ export function TransactionFormDialog({
 
   const selectedAccount = accounts.find((a) => a.id === accountId);
   const defaultCurrency = selectedAccount?.currency ?? "BRL";
+
+  const effectiveReceiptKey = receiptKey ?? transaction?.receiptKey ?? undefined;
+  const receiptSrc = effectiveReceiptKey
+    ? `/api/receipts/view?key=${encodeURIComponent(effectiveReceiptKey)}`
+    : null;
 
   const categoriesForType = useMemo(() => {
     return categories.filter((c) => c.kind === type);
@@ -135,6 +144,7 @@ export function TransactionFormDialog({
       description: String(form.get("description") || ""),
       notes: String(form.get("notes") || ""),
       tagIds: selectedTagIds,
+      receiptKey: effectiveReceiptKey,
     };
 
     startTransition(async () => {
@@ -163,6 +173,28 @@ export function TransactionFormDialog({
         </DialogHeader>
 
         <form onSubmit={onSubmit} className="grid gap-4" noValidate>
+          {receiptSrc ? (
+            <div className="grid gap-1.5">
+              <span className="text-xs font-medium text-muted-foreground">
+                Comprovante — confira os dados extraídos
+              </span>
+              <a
+                href={receiptSrc}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block overflow-hidden rounded-lg border bg-muted"
+                title="Abrir comprovante em tamanho real"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={receiptSrc}
+                  alt="Comprovante"
+                  className="max-h-56 w-full object-contain"
+                />
+              </a>
+            </div>
+          ) : null}
+
           <div className="grid grid-cols-2 gap-3">
             <div className="grid gap-2">
               <Label htmlFor="type">Tipo</Label>

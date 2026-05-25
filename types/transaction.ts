@@ -42,6 +42,12 @@ export const transactionInputSchema = z.object({
     .transform((v) => (v === "" ? undefined : v))
     .optional(),
   tagIds: z.array(z.string().uuid()).optional(),
+  receiptKey: z
+    .string()
+    .trim()
+    .max(256)
+    .transform((v) => (v === "" ? undefined : v))
+    .optional(),
 });
 
 export type TransactionInput = z.infer<typeof transactionInputSchema>;
