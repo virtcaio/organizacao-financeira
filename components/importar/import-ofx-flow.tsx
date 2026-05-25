@@ -366,6 +366,23 @@ export function ImportOfxFlow({
             </Card>
           ) : null}
 
+          {aiBusy ? (
+            <div
+              role="status"
+              aria-live="polite"
+              className="flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm"
+            >
+              <Loader2Icon className="size-4 animate-spin text-primary" />
+              <span>
+                <strong className="font-medium">Categorizando com IA…</strong>{" "}
+                <span className="text-muted-foreground">
+                  As categorias ficam bloqueadas até a IA terminar. Você pode
+                  editar a descrição e a data normalmente.
+                </span>
+              </span>
+            </div>
+          ) : null}
+
           <div className="rounded-lg border">
             <table className="w-full text-sm">
               <thead className="bg-muted/50">
@@ -387,6 +404,7 @@ export function ImportOfxFlow({
                     onChange={(patch) => updateRow(r.fitid, patch)}
                     onRemove={() => removeRow(r.fitid)}
                     disabled={isSaving}
+                    aiBusy={aiBusy}
                   />
                 ))}
               </tbody>
@@ -397,11 +415,19 @@ export function ImportOfxFlow({
             <Button variant="ghost" onClick={reset} disabled={isSaving}>
               Trocar arquivo
             </Button>
-            <Button onClick={onSave} disabled={isSaving || rows.length === 0}>
+            <Button
+              onClick={onSave}
+              disabled={isSaving || aiBusy || rows.length === 0}
+            >
               {isSaving ? (
                 <>
                   <Loader2Icon className="mr-2 size-4 animate-spin" />
                   {LOADING_TEXT.save}
+                </>
+              ) : aiBusy ? (
+                <>
+                  <Loader2Icon className="mr-2 size-4 animate-spin" />
+                  Aguardando IA…
                 </>
               ) : (
                 <>
@@ -424,12 +450,14 @@ function OfxRow({
   onChange,
   onRemove,
   disabled,
+  aiBusy,
 }: {
   row: DraftRow;
   categories: CategoryNode[];
   onChange: (patch: Partial<DraftRow>) => void;
   onRemove: () => void;
   disabled?: boolean;
+  aiBusy?: boolean;
 }) {
   const filtered = useMemo(
     () => categories.filter((c) => c.kind === row.type),
@@ -469,33 +497,40 @@ function OfxRow({
         </Badge>
       </td>
       <td className="px-3 py-2">
-        <Select
-          value={row.categoryId ?? ""}
-          onValueChange={(v) => onChange({ categoryId: v && v !== "" ? v : null })}
-          disabled={disabled}
-        >
-          <SelectTrigger className="h-8 w-full text-xs">
-            <SelectValue placeholder="Sem categoria">
-              {(v: string) => labelById.get(v) ?? "Sem categoria"}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            {filtered.map((parent) => (
-              <SelectGroup key={parent.id}>
-                <SelectLabel>{parent.name}</SelectLabel>
-                {parent.children.length === 0 ? (
-                  <SelectItem value={parent.id}>{parent.name}</SelectItem>
-                ) : (
-                  parent.children.map((ch) => (
-                    <SelectItem key={ch.id} value={ch.id}>
-                      {ch.name}
-                    </SelectItem>
-                  ))
-                )}
-              </SelectGroup>
-            ))}
-          </SelectContent>
-        </Select>
+        {aiBusy ? (
+          <div className="flex h-8 items-center gap-1.5 rounded-md border border-dashed border-primary/30 bg-primary/5 px-2 text-xs text-muted-foreground">
+            <Loader2Icon className="size-3 animate-spin text-primary" />
+            Categorizando…
+          </div>
+        ) : (
+          <Select
+            value={row.categoryId ?? ""}
+            onValueChange={(v) => onChange({ categoryId: v && v !== "" ? v : null })}
+            disabled={disabled}
+          >
+            <SelectTrigger className="h-8 w-full text-xs">
+              <SelectValue placeholder="Sem categoria">
+                {(v: string) => labelById.get(v) ?? "Sem categoria"}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {filtered.map((parent) => (
+                <SelectGroup key={parent.id}>
+                  <SelectLabel>{parent.name}</SelectLabel>
+                  {parent.children.length === 0 ? (
+                    <SelectItem value={parent.id}>{parent.name}</SelectItem>
+                  ) : (
+                    parent.children.map((ch) => (
+                      <SelectItem key={ch.id} value={ch.id}>
+                        {ch.name}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectGroup>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
       </td>
       <td
         className={`px-3 py-2 text-right tabular-nums text-xs ${
