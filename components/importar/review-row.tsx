@@ -1,7 +1,7 @@
 "use client";
 
 import { TrashIcon } from "lucide-react";
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { extractRulePattern } from "@/lib/categorization/apply";
 import type { CategoryNode } from "@/lib/db/queries/categories";
 
 export type DraftRow = {
@@ -27,20 +28,30 @@ export type DraftRow = {
   installmentTotal: number | null;
 };
 
+export type RuleSuggestion = {
+  pattern: string;
+  categoryId: string;
+};
+
 export function ReviewRow({
   row,
   categories,
   onChange,
   onRemove,
+  onCreateRule,
   disabled,
 }: {
   row: DraftRow;
   categories: CategoryNode[];
   onChange: (patch: Partial<DraftRow>) => void;
   onRemove: () => void;
+  onCreateRule?: (suggestion: RuleSuggestion) => void;
   disabled?: boolean;
 }) {
   const expense = categories.filter((c) => c.kind === "expense");
+
+  // Categoria original pra detectar mudança feita pelo user (não vinda da IA/regra).
+  const originalCategoryId = useRef(row.categoryId).current;
 
   const labelById = useMemo(() => {
     const map = new Map<string, string>();
@@ -52,6 +63,12 @@ export function ReviewRow({
     }
     return map;
   }, [expense]);
+
+  const userChangedToValidCategory =
+    !!onCreateRule &&
+    row.categoryId !== null &&
+    row.categoryId !== originalCategoryId &&
+    !row.ruleId; // se já veio de regra, não oferece criar outra
 
   return (
     <tr className="border-t">
@@ -105,6 +122,21 @@ export function ReviewRow({
             ))}
           </SelectContent>
         </Select>
+        {userChangedToValidCategory ? (
+          <button
+            type="button"
+            className="mt-1 text-[10px] text-muted-foreground hover:text-foreground underline underline-offset-2"
+            onClick={() =>
+              onCreateRule!({
+                pattern: extractRulePattern(row.description),
+                categoryId: row.categoryId!,
+              })
+            }
+            disabled={disabled}
+          >
+            Criar regra
+          </button>
+        ) : null}
       </td>
       <td className="py-2 pr-2 w-28">
         <Input

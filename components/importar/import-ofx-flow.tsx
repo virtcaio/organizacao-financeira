@@ -30,6 +30,8 @@ import { LOADING_TEXT } from "@/lib/ui-text";
 import { formatCurrency } from "@/lib/format";
 import { useAnthropicKey } from "@/lib/ai/use-anthropic-key";
 import { categorizeImportedWithClaude } from "@/lib/ai/categorize-imported";
+import { extractRulePattern } from "@/lib/categorization/apply";
+import { RuleFormDialog } from "@/components/configuracoes/rule-form-dialog";
 import type { AccountOption } from "@/components/transacoes/transaction-form-dialog";
 import type { CategoryNode } from "@/lib/db/queries/categories";
 import type { OfxStatement, OfxTransaction } from "@/lib/ofx/parse";
@@ -65,6 +67,7 @@ export function ImportOfxFlow({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isSaving, startSaving] = useTransition();
   const [aiBusy, setAiBusy] = useState(false);
+  const [ruleSuggestion, setRuleSuggestion] = useState<{ pattern: string; categoryId: string } | null>(null);
 
   const selectedAccount = useMemo(
     () => accounts.find((a) => a.id === accountId),
@@ -421,6 +424,7 @@ export function ImportOfxFlow({
                     categories={categories}
                     onChange={(patch) => updateRow(r.fitid, patch)}
                     onRemove={() => removeRow(r.fitid)}
+                    onCreateRule={(s) => setRuleSuggestion(s)}
                     disabled={isSaving}
                     aiBusy={aiBusy}
                   />
@@ -458,6 +462,15 @@ export function ImportOfxFlow({
           </div>
         </>
       )}
+
+      <RuleFormDialog
+        open={!!ruleSuggestion}
+        onOpenChange={(o) => {
+          if (!o) setRuleSuggestion(null);
+        }}
+        categories={categories}
+        presetCreate={ruleSuggestion ?? undefined}
+      />
     </div>
   );
 }
@@ -467,6 +480,7 @@ function OfxRow({
   categories,
   onChange,
   onRemove,
+  onCreateRule,
   disabled,
   aiBusy,
 }: {
@@ -474,6 +488,7 @@ function OfxRow({
   categories: CategoryNode[];
   onChange: (patch: Partial<DraftRow>) => void;
   onRemove: () => void;
+  onCreateRule?: (suggestion: { pattern: string; categoryId: string }) => void;
   disabled?: boolean;
   aiBusy?: boolean;
 }) {
@@ -481,6 +496,12 @@ function OfxRow({
     () => categories.filter((c) => c.kind === row.type),
     [categories, row.type],
   );
+  const originalCategoryId = useRef(row.categoryId).current;
+  const userChangedToValidCategory =
+    !!onCreateRule &&
+    row.categoryId !== null &&
+    row.categoryId !== originalCategoryId &&
+    !row.ruleId;
   const labelById = useMemo(() => {
     const map = new Map<string, string>();
     for (const p of filtered) {
@@ -549,6 +570,21 @@ function OfxRow({
             </SelectContent>
           </Select>
         )}
+        {userChangedToValidCategory ? (
+          <button
+            type="button"
+            className="mt-1 text-[10px] text-muted-foreground hover:text-foreground underline underline-offset-2"
+            onClick={() =>
+              onCreateRule!({
+                pattern: extractRulePattern(row.description),
+                categoryId: row.categoryId!,
+              })
+            }
+            disabled={disabled}
+          >
+            Criar regra
+          </button>
+        ) : null}
       </td>
       <td
         className={`px-3 py-2 text-right tabular-nums text-xs ${
