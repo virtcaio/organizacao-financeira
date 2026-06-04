@@ -1,17 +1,24 @@
 import { AnthropicKeyForm } from "@/components/configuracoes/anthropic-key-form";
 import { TagsManager } from "@/components/configuracoes/tags-manager";
 import { CategoriesManager } from "@/components/configuracoes/categories-manager";
+import { RulesManager } from "@/components/configuracoes/rules-manager";
 import { requireUserId } from "@/lib/auth-helpers";
 import { listTagsForUser } from "@/lib/db/queries/tags";
-import { listAllCategoriesForUser } from "@/lib/db/queries/categories";
+import {
+  listAllCategoriesForUser,
+  listCategoriesForUser,
+} from "@/lib/db/queries/categories";
+import { listRulesForUser } from "@/lib/db/queries/categorization-rules";
 
 export const metadata = { title: "Configurações" };
 
 export default async function ConfiguracoesPage() {
   const userId = await requireUserId();
-  const [tags, categoryTree] = await Promise.all([
+  const [tags, categoryTree, categoriesForRules, rules] = await Promise.all([
     listTagsForUser(userId),
     listAllCategoriesForUser(userId),
+    listCategoriesForUser(userId),
+    listRulesForUser(userId),
   ]);
 
   return (
@@ -19,11 +26,12 @@ export default async function ConfiguracoesPage() {
       <header>
         <h1 className="text-2xl font-semibold">Configurações</h1>
         <p className="text-sm text-muted-foreground">
-          Chave da Anthropic, categorias, tags e preferências da conta.
+          Chave da Anthropic, categorias, regras, tags e preferências da conta.
         </p>
       </header>
       <AnthropicKeyForm />
       <CategoriesManager tree={categoryTree} />
+      <RulesManager rules={rules} categories={categoriesForRules} />
       <TagsManager initialTags={tags} />
     </div>
   );
