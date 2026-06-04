@@ -13,8 +13,10 @@ import { NewTransferButton } from "@/components/transacoes/new-transfer-button";
 import { ReceiptCaptureButton } from "@/components/transacoes/receipt-capture-button";
 import { TransactionRowActions } from "@/components/transacoes/transaction-row-actions";
 import { TransferRowActions } from "@/components/transacoes/transfer-row-actions";
-import { TransactionTagFilter } from "@/components/transacoes/transaction-tag-filter";
+import { TransactionFiltersBar } from "@/components/transacoes/transaction-filters-bar";
+import { ActiveFiltersChips } from "@/components/transacoes/active-filters-chips";
 import { TagBadge } from "@/components/transacoes/tag-badge";
+import { applyFilters, hasAnyFilter, parseFilters } from "@/lib/transactions/filter";
 import type { TransferDraft } from "@/components/transacoes/transfer-form-dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
@@ -63,7 +65,14 @@ function buildTransferDraft(
 export default async function TransacoesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tag?: string }>;
+  searchParams: Promise<{
+    tag?: string;
+    from?: string;
+    to?: string;
+    account?: string;
+    category?: string;
+    q?: string;
+  }>;
 }) {
   const userId = await requireUserId();
   const params = await searchParams;
@@ -74,11 +83,9 @@ export default async function TransacoesPage({
     listTagsForUser(userId),
   ]);
 
-  const filterTagId =
-    params.tag && tags.some((t) => t.id === params.tag) ? params.tag : null;
-  const transactions = filterTagId
-    ? allTransactions.filter((t) => t.tags.some((tag) => tag.id === filterTagId))
-    : allTransactions;
+  const filters = parseFilters(params, accounts, categories, tags);
+  const transactions = applyFilters(allTransactions, filters, categories);
+  const anyFilter = hasAnyFilter(filters);
 
   const byId = new Map(allTransactions.map((t) => [t.id, t]));
   const hasAccount = accounts.length > 0;
@@ -94,7 +101,6 @@ export default async function TransacoesPage({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <TransactionTagFilter tags={tags} selectedTagId={filterTagId} />
           {hasAccount ? (
             <ReceiptCaptureButton
               accounts={accounts}
@@ -113,6 +119,23 @@ export default async function TransacoesPage({
         </div>
       </header>
 
+      {hasAccount && allTransactions.length > 0 ? (
+        <div className="space-y-2">
+          <TransactionFiltersBar
+            accounts={accounts}
+            categories={categories}
+            tags={tags}
+            filters={filters}
+          />
+          <ActiveFiltersChips
+            filters={filters}
+            accounts={accounts}
+            categories={categories}
+            tags={tags}
+          />
+        </div>
+      ) : null}
+
       {!hasAccount ? (
         <EmptyAccounts />
       ) : allTransactions.length === 0 ? (
@@ -120,11 +143,11 @@ export default async function TransacoesPage({
       ) : transactions.length === 0 ? (
         <EmptyState
           variant="list"
-          title="Nenhuma transação com essa tag"
-          description="Tente outra tag ou limpe o filtro."
+          title="Nenhuma transação com esses filtros"
+          description="Ajuste os filtros ou limpe tudo pra ver todas as transações."
           action={
             <Link href="/transacoes" className={buttonVariants({ variant: "outline" })}>
-              Limpar filtro
+              Limpar filtros
             </Link>
           }
         />
@@ -259,7 +282,7 @@ export default async function TransacoesPage({
       {transactions.length > 0 ? (
         <p className="text-xs text-muted-foreground">
           {transactions.length} transaç{transactions.length === 1 ? "ão" : "ões"}
-          {filterTagId ? " (filtrado)" : ""} ·{" "}
+          {anyFilter ? " (filtrado)" : ""} ·{" "}
           {Object.entries(
             transactions.reduce<Record<string, number>>((acc, t) => {
               acc[t.type] = (acc[t.type] ?? 0) + 1;
