@@ -175,12 +175,32 @@ export const categories = pgTable(
     icon: text("icon"),
     color: text("color"),
     isSystem: boolean("is_system").notNull().default(false),
-    archived: boolean("archived").notNull().default(false),
+    archived: boolean("archived").notNull().default(false), // per-row archive (custom)
   },
   (t) => [
     index("category_user_idx").on(t.userId),
     index("category_parent_idx").on(t.parentId),
   ],
+);
+
+// Override per-usuário pra categorias-seed (user_id IS NULL).
+// Existir uma linha (userId, categoryId, archived=true) significa
+// "este usuário arquivou esta seed". Pra restaurar, apaga a linha.
+// Custom (categories.userId NOT NULL) usa categories.archived direto.
+export const categoryUserOverrides = pgTable(
+  "category_user_override",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    categoryId: uuid("category_id")
+      .notNull()
+      .references(() => categories.id, { onDelete: "cascade" }),
+    archived: boolean("archived").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("category_user_override_uq").on(t.userId, t.categoryId)],
 );
 
 export const transactions = pgTable(
