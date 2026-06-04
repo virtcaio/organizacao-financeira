@@ -8,6 +8,8 @@ import {
 import { buildImportPdfSystemPrompt } from "@/lib/ai/prompts/import-pdf";
 import { importPdfOutputSchema } from "@/lib/ai/types";
 import { listCategoriesForUser } from "@/lib/db/queries/categories";
+import { listRulesForApply } from "@/lib/db/queries/categorization-rules";
+import { findFirstMatchingRule } from "@/lib/categorization/apply";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -151,9 +153,21 @@ export async function POST(req: Request) {
     );
   }
 
+  // Override pós-IA: regras locais sobrescrevem sugestões da IA quando casam.
+  const rules = await listRulesForApply(userId);
+  const overridden = {
+    ...result.data,
+    transactions: result.data.transactions.map((tx) => {
+      const match = findFirstMatchingRule(tx.description, rules);
+      return match
+        ? { ...tx, category_id: match.categoryId, rule_id: match.id }
+        : { ...tx, rule_id: null };
+    }),
+  };
+
   return NextResponse.json({
     ok: true,
-    data: result.data,
+    data: overridden,
     tokensIn: response.usage?.input_tokens ?? 0,
     tokensOut: response.usage?.output_tokens ?? 0,
     // Cache hint for debugging (Anthropic returns these usage fields when cache is active)

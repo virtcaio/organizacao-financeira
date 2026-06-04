@@ -1,7 +1,7 @@
 "use client";
 
 import { TrashIcon } from "lucide-react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { extractRulePattern } from "@/lib/categorization/apply";
 import type { CategoryNode } from "@/lib/db/queries/categories";
 
 export type DraftRow = {
@@ -21,8 +22,15 @@ export type DraftRow = {
   description: string;
   amount: string;
   categoryId: string | null;
+  /** ID da regra que setou a categoria (pra incrementar hitCount no save). */
+  ruleId: string | null;
   installmentSeq: number | null;
   installmentTotal: number | null;
+};
+
+export type RuleSuggestion = {
+  pattern: string;
+  categoryId: string;
 };
 
 export function ReviewRow({
@@ -30,15 +38,21 @@ export function ReviewRow({
   categories,
   onChange,
   onRemove,
+  onCreateRule,
   disabled,
 }: {
   row: DraftRow;
   categories: CategoryNode[];
   onChange: (patch: Partial<DraftRow>) => void;
   onRemove: () => void;
+  onCreateRule?: (suggestion: RuleSuggestion) => void;
   disabled?: boolean;
 }) {
   const expense = categories.filter((c) => c.kind === "expense");
+
+  // Categoria original (no primeiro render) pra detectar mudança feita pelo user.
+  // useState snapshot é o padrão idiomático — useRef.current não pode ser lido em render.
+  const [originalCategoryId] = useState(row.categoryId);
 
   const labelById = useMemo(() => {
     const map = new Map<string, string>();
@@ -50,6 +64,12 @@ export function ReviewRow({
     }
     return map;
   }, [expense]);
+
+  const userChangedToValidCategory =
+    !!onCreateRule &&
+    row.categoryId !== null &&
+    row.categoryId !== originalCategoryId &&
+    !row.ruleId; // se já veio de regra, não oferece criar outra
 
   return (
     <tr className="border-t">
@@ -103,6 +123,21 @@ export function ReviewRow({
             ))}
           </SelectContent>
         </Select>
+        {userChangedToValidCategory ? (
+          <button
+            type="button"
+            className="mt-1 text-[10px] text-muted-foreground hover:text-foreground underline underline-offset-2"
+            onClick={() =>
+              onCreateRule!({
+                pattern: extractRulePattern(row.description),
+                categoryId: row.categoryId!,
+              })
+            }
+            disabled={disabled}
+          >
+            Criar regra
+          </button>
+        ) : null}
       </td>
       <td className="py-2 pr-2 w-28">
         <Input

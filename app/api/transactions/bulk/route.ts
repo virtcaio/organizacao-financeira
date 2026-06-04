@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { financialAccounts, transactions } from "@/lib/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
+import { incrementHitCounts } from "@/lib/db/queries/categorization-rules";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,6 +28,8 @@ const rowSchema = z.object({
   source: z.enum(["manual", "photo", "csv", "pdf", "ofx"]).optional(),
   /** ID externo (ex: FITID do OFX) — usado para dedup quando presente. */
   sourceRef: z.string().trim().max(128).nullable().optional(),
+  /** Quando a categoria veio de uma regra de categorização — pra incrementar hitCount. */
+  ruleId: z.string().uuid().nullable().optional(),
 });
 
 const bodySchema = z.object({
@@ -135,6 +138,16 @@ export async function POST(req: Request) {
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Falha ao inserir";
     return NextResponse.json({ ok: false, error: msg }, { status: 500 });
+  }
+
+  // Increment hitCount das regras que foram aplicadas no save (best-effort, não bloqueia).
+  const ruleIds = toInsert.map((r) => r.ruleId).filter((v): v is string => !!v);
+  if (ruleIds.length > 0) {
+    try {
+      await incrementHitCounts(userId, ruleIds);
+    } catch {
+      // intencional — telemetria de hitCount não deve quebrar o save
+    }
   }
 
   return NextResponse.json({ ok: true, inserted: toInsert.length, skipped });

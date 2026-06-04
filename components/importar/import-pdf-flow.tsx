@@ -24,7 +24,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { ReviewRow, type DraftRow } from "./review-row";
+import { ReviewRow, type DraftRow, type RuleSuggestion } from "./review-row";
+import { RuleFormDialog } from "@/components/configuracoes/rule-form-dialog";
 import { useAnthropicKey } from "@/lib/ai/use-anthropic-key";
 import { importPdfWithClaude } from "@/lib/ai/import-pdf";
 import type { AccountOption } from "@/components/transacoes/transaction-form-dialog";
@@ -51,6 +52,7 @@ export function ImportPdfFlow({
   const [rows, setRows] = useState<DraftRow[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isSaving, startSaving] = useTransition();
+  const [ruleSuggestion, setRuleSuggestion] = useState<RuleSuggestion | null>(null);
 
   const accountCurrency = useMemo(
     () => accounts.find((a) => a.id === accountId)?.currency ?? "BRL",
@@ -116,6 +118,7 @@ export function ImportPdfFlow({
         description: t.description,
         amount: t.amount.toFixed(2),
         categoryId: t.category_id,
+        ruleId: t.rule_id ?? null,
         installmentSeq: t.installment_seq ?? null,
         installmentTotal: t.installment_total ?? null,
       })),
@@ -161,6 +164,7 @@ export function ImportPdfFlow({
               description: r.description,
               installmentSeq: r.installmentSeq,
               installmentTotal: r.installmentTotal,
+              ruleId: r.ruleId,
               source: "pdf",
             })),
           }),
@@ -307,6 +311,7 @@ export function ImportPdfFlow({
                           categories={categories}
                           onChange={(patch) => updateRow(idx, patch)}
                           onRemove={() => removeRow(idx)}
+                          onCreateRule={(s) => setRuleSuggestion(s)}
                           disabled={isSaving}
                         />
                       ))}
@@ -349,6 +354,15 @@ export function ImportPdfFlow({
           </CardContent>
         </Card>
       ) : null}
+
+      <RuleFormDialog
+        open={!!ruleSuggestion}
+        onOpenChange={(o) => {
+          if (!o) setRuleSuggestion(null);
+        }}
+        categories={categories}
+        presetCreate={ruleSuggestion ?? undefined}
+      />
     </div>
   );
 }
