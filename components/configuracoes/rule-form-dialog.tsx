@@ -157,7 +157,7 @@ export function RuleFormDialog({
               maxLength={200}
             />
             <p className="text-xs text-muted-foreground">
-              Substring case-insensitive. Ex: "uber" casa "UBER *TRIP 123".
+              Substring case-insensitive. Ex: &quot;uber&quot; casa &quot;UBER *TRIP 123&quot;.
             </p>
             {errors.pattern ? <FieldError msg={errors.pattern} /> : null}
           </div>

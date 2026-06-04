@@ -102,6 +102,7 @@ export async function POST(req: Request) {
         _idx: idToInput.get(m.id) ?? 0,
       }))
       .sort((a, b) => a._idx - b._idx)
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       .map(({ _idx, ...rest }) => rest);
     return NextResponse.json({
       ok: true,

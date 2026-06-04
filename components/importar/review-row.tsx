@@ -1,7 +1,7 @@
 "use client";
 
 import { TrashIcon } from "lucide-react";
-import { useMemo, useRef } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -50,8 +50,9 @@ export function ReviewRow({
 }) {
   const expense = categories.filter((c) => c.kind === "expense");
 
-  // Categoria original pra detectar mudança feita pelo user (não vinda da IA/regra).
-  const originalCategoryId = useRef(row.categoryId).current;
+  // Categoria original (no primeiro render) pra detectar mudança feita pelo user.
+  // useState snapshot é o padrão idiomático — useRef.current não pode ser lido em render.
+  const [originalCategoryId] = useState(row.categoryId);
 
   const labelById = useMemo(() => {
     const map = new Map<string, string>();

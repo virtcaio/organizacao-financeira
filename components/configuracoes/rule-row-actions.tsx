@@ -85,7 +85,7 @@ export function RuleRowActions({ preset, patternLabel, categories }: Props) {
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Excluir regra "{patternLabel}"?</AlertDialogTitle>
+            <AlertDialogTitle>Excluir regra &quot;{patternLabel}&quot;?</AlertDialogTitle>
             <AlertDialogDescription>
               A regra deixa de aplicar nas próximas importações. Transações já
               salvas não são afetadas.

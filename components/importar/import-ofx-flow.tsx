@@ -496,7 +496,7 @@ function OfxRow({
     () => categories.filter((c) => c.kind === row.type),
     [categories, row.type],
   );
-  const originalCategoryId = useRef(row.categoryId).current;
+  const [originalCategoryId] = useState(row.categoryId);
   const userChangedToValidCategory =
     !!onCreateRule &&
     row.categoryId !== null &&
