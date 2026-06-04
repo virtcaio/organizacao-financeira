@@ -9,6 +9,8 @@ import {
 import { buildCategorizeImportedSystemPrompt } from "@/lib/ai/prompts/categorize-imported";
 import { categorizeImportedOutputSchema } from "@/lib/ai/types";
 import { listCategoriesForUser } from "@/lib/db/queries/categories";
+import { listRulesForApply } from "@/lib/db/queries/categorization-rules";
+import { applyRulesToItems } from "@/lib/categorization/apply";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -77,10 +79,45 @@ export async function POST(req: Request) {
   }
 
   const categories = await listCategoriesForUser(userId);
+
+  // Pre-pass: aplica regras locais antes da IA pra poupar tokens.
+  const rules = await listRulesForApply(userId);
+  const { matched, unmatched } = applyRulesToItems(parsedReq.data.items, rules);
+
+  const catLabelById = new Map<string, string>();
+  for (const c of categories) {
+    catLabelById.set(c.id, c.name);
+    for (const ch of c.children) catLabelById.set(ch.id, ch.name);
+  }
+
+  // 100% matched? Resposta direta sem chamar IA.
+  if (unmatched.length === 0) {
+    const idToInput = new Map(parsedReq.data.items.map((i, idx) => [i.id, idx]));
+    const suggestions = matched
+      .map((m) => ({
+        id: m.id,
+        category_id: m.categoryId,
+        category_name: catLabelById.get(m.categoryId) ?? null,
+        rule_id: m.ruleId,
+        _idx: idToInput.get(m.id) ?? 0,
+      }))
+      .sort((a, b) => a._idx - b._idx)
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      .map(({ _idx, ...rest }) => rest);
+    return NextResponse.json({
+      ok: true,
+      data: { suggestions },
+      tokensIn: 0,
+      tokensOut: 0,
+      cacheReads: 0,
+      cacheCreations: 0,
+    });
+  }
+
   const system = buildCategorizeImportedSystemPrompt(categories);
   const client = buildAnthropicForRequest(apiKey);
 
-  const userPayload = JSON.stringify({ items: parsedReq.data.items });
+  const userPayload = JSON.stringify({ items: unmatched });
 
   let response;
   try {
@@ -139,9 +176,31 @@ export async function POST(req: Request) {
     );
   }
 
+  // Merge: regras (matched) + IA (result.data) preservando ordem original do input.
+  const aiById = new Map(result.data.suggestions.map((s) => [s.id, s]));
+  const matchedById = new Map(matched.map((m) => [m.id, m]));
+  const mergedSuggestions = parsedReq.data.items.map((item) => {
+    const r = matchedById.get(item.id);
+    if (r) {
+      return {
+        id: item.id,
+        category_id: r.categoryId,
+        category_name: catLabelById.get(r.categoryId) ?? null,
+        rule_id: r.ruleId,
+      };
+    }
+    const a = aiById.get(item.id);
+    return {
+      id: item.id,
+      category_id: a?.category_id ?? null,
+      category_name: a?.category_name ?? null,
+      rule_id: null,
+    };
+  });
+
   return NextResponse.json({
     ok: true,
-    data: result.data,
+    data: { suggestions: mergedSuggestions },
     tokensIn: response.usage?.input_tokens ?? 0,
     tokensOut: response.usage?.output_tokens ?? 0,
     cacheReads: response.usage?.cache_read_input_tokens ?? 0,

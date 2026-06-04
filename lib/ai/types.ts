@@ -12,6 +12,7 @@ export const importedTransactionSchema = z.object({
   installment_seq: z.number().int().positive().nullable().optional(),
   installment_total: z.number().int().positive().nullable().optional(),
   merchant_raw: z.string().nullable().optional(),
+  rule_id: z.string().uuid().nullable().optional(),
 });
 
 export type ImportedTransaction = z.infer<typeof importedTransactionSchema>;
@@ -43,6 +44,7 @@ export const ocrReceiptOutputSchema = z.object({
   description: z.string().min(1).max(200),
   category_id: z.string().uuid().nullable(),
   category_name: z.string().nullable(),
+  rule_id: z.string().uuid().nullable().optional(),
 });
 
 export type OcrReceiptOutput = z.infer<typeof ocrReceiptOutputSchema>;
@@ -54,6 +56,7 @@ export const categorizeImportedOutputSchema = z.object({
       id: z.string().min(1),
       category_id: z.string().uuid().nullable(),
       category_name: z.string().nullable(),
+      rule_id: z.string().uuid().nullable().optional(),
     }),
   ),
 });

@@ -33,9 +33,11 @@ test("cadastro → dashboard → contas → importar guards", async ({ page, con
   // Fresh user: no key + no account. The key guard fires first.
   await expect(page.getByText(/Configure sua chave/i)).toBeVisible();
 
-  // 4. /configuracoes renders the BYOK form
+  // 4. /configuracoes renders the BYOK form.
+  // Use the exact "(BYOK)" string to avoid matching the dev-only hydration
+  // overlay (anthropic-key-form has a known loading-state hydration mismatch).
   await page.goto("/configuracoes");
-  await expect(page.getByText(/Anthropic API Key/i)).toBeVisible();
+  await expect(page.getByText("Anthropic API Key (BYOK)")).toBeVisible();
   await expect(page.getByLabel(/Sua chave/i)).toBeVisible();
 
   // 5. Submit an obviously invalid key → expect a toast error from /api/ai/validate-key
