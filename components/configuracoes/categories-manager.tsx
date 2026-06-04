@@ -117,6 +117,8 @@ function CategoryRow({
 }) {
   return (
     <div
+      data-category-id={node.id}
+      data-category-name={node.name}
       className={cn(
         "flex items-center justify-between gap-3 px-3 py-2",
         node.archivedForUser ? "opacity-60" : "",
