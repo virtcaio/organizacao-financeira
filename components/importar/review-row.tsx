@@ -21,6 +21,8 @@ export type DraftRow = {
   description: string;
   amount: string;
   categoryId: string | null;
+  /** ID da regra que setou a categoria (pra incrementar hitCount no save). */
+  ruleId: string | null;
   installmentSeq: number | null;
   installmentTotal: number | null;
 };

@@ -10,7 +10,9 @@ import {
   sanitizeForLog,
 } from "@/lib/ai/server";
 import { buildOcrReceiptSystemPrompt } from "@/lib/ai/prompts/ocr-receipt";
-import { ocrReceiptOutputSchema } from "@/lib/ai/types";
+import { ocrReceiptOutputSchema, type OcrReceiptOutput } from "@/lib/ai/types";
+import { listRulesForApply } from "@/lib/db/queries/categorization-rules";
+import { findFirstMatchingRule } from "@/lib/categorization/apply";
 import { listCategoriesForUser } from "@/lib/db/queries/categories";
 import { uploadReceipt, signedReceiptUrl, ACCEPTED_IMAGE_TYPES } from "@/lib/storage";
 
@@ -108,9 +110,10 @@ export async function POST(req: Request) {
   if (cached[0]) {
     const reparsed = ocrReceiptOutputSchema.safeParse(cached[0].output);
     if (reparsed.success) {
+      const withRules = await overrideOcrWithRules(userId, reparsed.data);
       return NextResponse.json({
         ok: true,
-        data: reparsed.data,
+        data: withRules,
         receiptKey,
         cached: true,
       });
@@ -206,10 +209,24 @@ export async function POST(req: Request) {
     })
     .onConflictDoNothing();
 
+  const withRules = await overrideOcrWithRules(userId, result.data);
   return NextResponse.json({
     ok: true,
-    data: result.data,
+    data: withRules,
     receiptKey,
     cached: false,
   });
+}
+
+async function overrideOcrWithRules(
+  userId: string,
+  data: OcrReceiptOutput,
+): Promise<OcrReceiptOutput> {
+  const rules = await listRulesForApply(userId);
+  if (rules.length === 0) return { ...data, rule_id: null };
+  // OCR retorna 1 transação. Tenta casar na description; fallback no merchant.
+  const text = `${data.description ?? ""} ${data.merchant ?? ""}`;
+  const match = findFirstMatchingRule(text, rules);
+  if (!match) return { ...data, rule_id: null };
+  return { ...data, category_id: match.categoryId, rule_id: match.id };
 }

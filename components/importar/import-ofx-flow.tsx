@@ -43,6 +43,7 @@ type DraftRow = {
   amount: string; // valor absoluto positivo
   type: "income" | "expense";
   categoryId: string | null;
+  ruleId: string | null;
 };
 
 export function ImportOfxFlow({
@@ -137,6 +138,7 @@ export function ImportOfxFlow({
         amount: t.amount.toFixed(2),
         type: t.type,
         categoryId: null,
+        ruleId: null,
       })),
     );
     setStep("review");
@@ -155,11 +157,26 @@ export function ImportOfxFlow({
       });
       setAiBusy(false);
       if (res.ok) {
-        const byId = new Map(res.data.suggestions.map((s) => [s.id, s.category_id]));
-        setRows((prev) =>
-          prev.map((r) => ({ ...r, categoryId: byId.get(r.fitid) ?? null })),
+        const byId = new Map(
+          res.data.suggestions.map((s) => [
+            s.id,
+            { categoryId: s.category_id, ruleId: s.rule_id ?? null },
+          ]),
         );
-        toast.success("Categorias sugeridas pela IA.");
+        setRows((prev) =>
+          prev.map((r) => {
+            const hit = byId.get(r.fitid);
+            return hit
+              ? { ...r, categoryId: hit.categoryId, ruleId: hit.ruleId }
+              : r;
+          }),
+        );
+        const ruleHits = res.data.suggestions.filter((s) => s.rule_id).length;
+        toast.success(
+          ruleHits > 0
+            ? `Categorias sugeridas (${ruleHits} via regras locais).`
+            : "Categorias sugeridas pela IA.",
+        );
       } else {
         toast.error(`Categorização falhou: ${res.error}`);
       }
@@ -196,6 +213,7 @@ export function ImportOfxFlow({
           notes: null,
           source: "ofx" as const,
           sourceRef: r.fitid,
+          ruleId: r.ruleId,
         })),
       };
       try {
