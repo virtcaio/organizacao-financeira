@@ -25,10 +25,12 @@ test("cadastro → dashboard → contas → importar guards", async ({ page, con
   await expect(page.getByText(/Bem-vindo/i)).toBeVisible();
   await expect(page.getByText("Cadastre suas contas")).toBeVisible();
 
-  // 3. /importar shows the "no account" guard (we have a user but no accounts/key)
+  // 3. /importar shows the hub (PDF / OFX chooser).
+  // The "Configure sua chave" / "no account" guards only fire after picking a flow.
   await page.goto("/importar");
-  // The guard order is: no key first → then no account.
-  // With a fresh user, both are missing — the "API key" guard fires first.
+  await expect(page.getByText("Fatura de cartão (PDF)")).toBeVisible();
+  await page.getByText("Fatura de cartão (PDF)").click();
+  // Fresh user: no key + no account. The key guard fires first.
   await expect(page.getByText(/Configure sua chave/i)).toBeVisible();
 
   // 4. /configuracoes renders the BYOK form
