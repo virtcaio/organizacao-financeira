@@ -11,6 +11,12 @@ import { categorizeImportedOutputSchema } from "@/lib/ai/types";
 import { listCategoriesForUser } from "@/lib/db/queries/categories";
 import { listRulesForApply } from "@/lib/db/queries/categorization-rules";
 import { applyRulesToItems } from "@/lib/categorization/apply";
+import {
+  canonicalJson,
+  findAiRunCache,
+  hashInput,
+  saveAiRun,
+} from "@/lib/ai/dedup";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -114,6 +120,41 @@ export async function POST(req: Request) {
     });
   }
 
+  // Cache key: lista unmatched normalizada (id, description, amount, type),
+  // ordenada por id em JSON canônico. Garante que mesma "pergunta lógica" bate.
+  const cacheKeyItems = unmatched
+    .map((u) => ({
+      id: u.id,
+      description: u.description,
+      amount: u.amount,
+      type: u.type,
+    }))
+    .sort((a, b) => a.id.localeCompare(b.id));
+  const inputHash = hashInput(canonicalJson(cacheKeyItems));
+
+  const cached = await findAiRunCache(userId, "categorize_csv", inputHash);
+  if (cached) {
+    const reparsed = categorizeImportedOutputSchema.safeParse(cached);
+    if (reparsed.success) {
+      return NextResponse.json({
+        ok: true,
+        data: {
+          suggestions: mergeSuggestions(
+            parsedReq.data.items,
+            matched,
+            reparsed.data.suggestions,
+            catLabelById,
+          ),
+        },
+        tokensIn: 0,
+        tokensOut: 0,
+        cacheReads: 0,
+        cacheCreations: 0,
+        cached: true,
+      });
+    }
+  }
+
   const system = buildCategorizeImportedSystemPrompt(categories);
   const client = buildAnthropicForRequest(apiKey);
 
@@ -176,10 +217,59 @@ export async function POST(req: Request) {
     );
   }
 
-  // Merge: regras (matched) + IA (result.data) preservando ordem original do input.
-  const aiById = new Map(result.data.suggestions.map((s) => [s.id, s]));
+  // Salva no cache antes do merge — chave já considera só `unmatched`.
+  await saveAiRun({
+    userId,
+    kind: "categorize_csv",
+    inputHash,
+    output: result.data,
+    tokensIn: response.usage?.input_tokens ?? 0,
+    tokensOut: response.usage?.output_tokens ?? 0,
+  });
+
+  const mergedSuggestions = mergeSuggestions(
+    parsedReq.data.items,
+    matched,
+    result.data.suggestions,
+    catLabelById,
+  );
+
+  return NextResponse.json({
+    ok: true,
+    data: { suggestions: mergedSuggestions },
+    tokensIn: response.usage?.input_tokens ?? 0,
+    tokensOut: response.usage?.output_tokens ?? 0,
+    cacheReads: response.usage?.cache_read_input_tokens ?? 0,
+    cacheCreations: response.usage?.cache_creation_input_tokens ?? 0,
+  });
+}
+
+type Suggestion = {
+  id: string;
+  category_id: string | null;
+  category_name: string | null;
+  rule_id?: string | null;
+};
+
+type MatchedItem = {
+  id: string;
+  categoryId: string;
+  ruleId: string;
+};
+
+/**
+ * Merge: regras (matched) + sugestões da IA, preservando ordem do input original.
+ * Reusado tanto no path da IA quanto no path do cache hit.
+ */
+function mergeSuggestions(
+  inputItems: Array<{ id: string }>,
+  matched: MatchedItem[],
+  aiSuggestions: Suggestion[],
+  catLabelById: Map<string, string>,
+): Suggestion[] {
+  const aiById = new Map(aiSuggestions.map((s) => [s.id, s]));
   const matchedById = new Map(matched.map((m) => [m.id, m]));
-  const mergedSuggestions = parsedReq.data.items.map((item) => {
+  return inputItems.map((item) => {
     const r = matchedById.get(item.id);
     if (r) {
       return {
@@ -196,14 +286,5 @@ export async function POST(req: Request) {
       category_name: a?.category_name ?? null,
       rule_id: null,
     };
-  });
-
-  return NextResponse.json({
-    ok: true,
-    data: { suggestions: mergedSuggestions },
-    tokensIn: response.usage?.input_tokens ?? 0,
-    tokensOut: response.usage?.output_tokens ?? 0,
-    cacheReads: response.usage?.cache_read_input_tokens ?? 0,
-    cacheCreations: response.usage?.cache_creation_input_tokens ?? 0,
   });
 }
