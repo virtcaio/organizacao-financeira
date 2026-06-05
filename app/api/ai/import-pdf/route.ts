@@ -6,10 +6,17 @@ import {
   sanitizeForLog,
 } from "@/lib/ai/server";
 import { buildImportPdfSystemPrompt } from "@/lib/ai/prompts/import-pdf";
-import { importPdfOutputSchema } from "@/lib/ai/types";
+import {
+  importPdfOutputSchema,
+  type ImportPdfOutput,
+} from "@/lib/ai/types";
 import { listCategoriesForUser } from "@/lib/db/queries/categories";
 import { listRulesForApply } from "@/lib/db/queries/categorization-rules";
-import { findFirstMatchingRule } from "@/lib/categorization/apply";
+import {
+  findFirstMatchingRule,
+  type CategorizationRule,
+} from "@/lib/categorization/apply";
+import { findAiRunCache, hashInput, saveAiRun } from "@/lib/ai/dedup";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -71,9 +78,30 @@ export async function POST(req: Request) {
     );
   }
 
-  // PDF → base64 (server side, never touches disk)
+  // PDF → buffer (pra hash de dedup) + base64 (pro envio à IA)
   const arrayBuffer = await file.arrayBuffer();
-  const base64 = Buffer.from(arrayBuffer).toString("base64");
+  const buffer = Buffer.from(arrayBuffer);
+  const inputHash = hashInput(buffer);
+
+  // Dedup: mesmo PDF já processado antes? Reaproveita output, aplica regras atuais.
+  const cached = await findAiRunCache(userId, "categorize_pdf", inputHash);
+  if (cached) {
+    const reparsed = importPdfOutputSchema.safeParse(cached);
+    if (reparsed.success) {
+      const rules = await listRulesForApply(userId);
+      return NextResponse.json({
+        ok: true,
+        data: applyRulesPostIA(reparsed.data, rules),
+        tokensIn: 0,
+        tokensOut: 0,
+        cacheReads: 0,
+        cacheCreations: 0,
+        cached: true,
+      });
+    }
+  }
+
+  const base64 = buffer.toString("base64");
 
   // System prompt with the user's category catalog
   const categories = await listCategoriesForUser(userId);
@@ -153,17 +181,20 @@ export async function POST(req: Request) {
     );
   }
 
+  // Salva no cache ANTES de aplicar regras — regras podem mudar entre runs;
+  // queremos cachear o "ground truth" da IA, não o resultado pós-rules.
+  await saveAiRun({
+    userId,
+    kind: "categorize_pdf",
+    inputHash,
+    output: result.data,
+    tokensIn: response.usage?.input_tokens ?? 0,
+    tokensOut: response.usage?.output_tokens ?? 0,
+  });
+
   // Override pós-IA: regras locais sobrescrevem sugestões da IA quando casam.
   const rules = await listRulesForApply(userId);
-  const overridden = {
-    ...result.data,
-    transactions: result.data.transactions.map((tx) => {
-      const match = findFirstMatchingRule(tx.description, rules);
-      return match
-        ? { ...tx, category_id: match.categoryId, rule_id: match.id }
-        : { ...tx, rule_id: null };
-    }),
-  };
+  const overridden = applyRulesPostIA(result.data, rules);
 
   return NextResponse.json({
     ok: true,
@@ -174,4 +205,19 @@ export async function POST(req: Request) {
     cacheReads: response.usage?.cache_read_input_tokens ?? 0,
     cacheCreations: response.usage?.cache_creation_input_tokens ?? 0,
   });
+}
+
+function applyRulesPostIA(
+  data: ImportPdfOutput,
+  rules: CategorizationRule[],
+): ImportPdfOutput {
+  return {
+    ...data,
+    transactions: data.transactions.map((tx) => {
+      const match = findFirstMatchingRule(tx.description, rules);
+      return match
+        ? { ...tx, category_id: match.categoryId, rule_id: match.id }
+        : { ...tx, rule_id: null };
+    }),
+  };
 }

@@ -1,9 +1,5 @@
 import { NextResponse } from "next/server";
-import { createHash } from "node:crypto";
-import { and, eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
-import { aiRuns } from "@/lib/db/schema";
 import {
   buildAnthropicForRequest,
   DEFAULT_MODEL,
@@ -15,6 +11,7 @@ import { listRulesForApply } from "@/lib/db/queries/categorization-rules";
 import { findFirstMatchingRule } from "@/lib/categorization/apply";
 import { listCategoriesForUser } from "@/lib/db/queries/categories";
 import { uploadReceipt, signedReceiptUrl, ACCEPTED_IMAGE_TYPES } from "@/lib/storage";
+import { findAiRunCache, hashInput, saveAiRun } from "@/lib/ai/dedup";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -81,7 +78,7 @@ export async function POST(req: Request) {
 
   const arrayBuffer = await file.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
-  const inputHash = createHash("sha256").update(buffer).digest("hex");
+  const inputHash = hashInput(buffer);
 
   // Sobe o comprovante no bucket privado (sempre — arquiva a foto).
   let receiptKey: string;
@@ -95,20 +92,9 @@ export async function POST(req: Request) {
   }
 
   // Dedup: mesma imagem já lida antes? Reaproveita o resultado, poupa a IA.
-  const cached = await db
-    .select({ output: aiRuns.output })
-    .from(aiRuns)
-    .where(
-      and(
-        eq(aiRuns.userId, userId),
-        eq(aiRuns.kind, "ocr_receipt"),
-        eq(aiRuns.inputHash, inputHash),
-      ),
-    )
-    .limit(1);
-
-  if (cached[0]) {
-    const reparsed = ocrReceiptOutputSchema.safeParse(cached[0].output);
+  const cached = await findAiRunCache(userId, "ocr_receipt", inputHash);
+  if (cached) {
+    const reparsed = ocrReceiptOutputSchema.safeParse(cached);
     if (reparsed.success) {
       const withRules = await overrideOcrWithRules(userId, reparsed.data);
       return NextResponse.json({
@@ -196,18 +182,15 @@ export async function POST(req: Request) {
     );
   }
 
-  // Registra a execução (dedup futuro). Ignora conflito de corrida.
-  await db
-    .insert(aiRuns)
-    .values({
-      userId,
-      kind: "ocr_receipt",
-      inputHash,
-      output: result.data,
-      tokensIn: response.usage?.input_tokens ?? 0,
-      tokensOut: response.usage?.output_tokens ?? 0,
-    })
-    .onConflictDoNothing();
+  // Registra a execução (dedup futuro).
+  await saveAiRun({
+    userId,
+    kind: "ocr_receipt",
+    inputHash,
+    output: result.data,
+    tokensIn: response.usage?.input_tokens ?? 0,
+    tokensOut: response.usage?.output_tokens ?? 0,
+  });
 
   const withRules = await overrideOcrWithRules(userId, result.data);
   return NextResponse.json({
