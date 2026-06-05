@@ -3,9 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { financialAccounts } from "@/lib/db/schema";
+import { financialAccounts, transactions } from "@/lib/db/schema";
 import { requireUserId } from "@/lib/auth-helpers";
-import { financialAccountInputSchema } from "@/types/financial-account";
+import {
+  financialAccountInputSchema,
+  reconcileAccountSchema,
+  type ReconcileAccountInput,
+} from "@/types/financial-account";
+import { computeAccountBalance } from "@/lib/db/queries/accounts";
 
 export type ActionResult<T = void> =
   | { ok: true; data: T }
@@ -102,4 +107,54 @@ export async function unarchiveFinancialAccountAction(id: string): Promise<Actio
   revalidatePath("/contas");
   revalidatePath("/dashboard");
   return { ok: true, data: undefined };
+}
+
+/**
+ * Concilia o saldo: gera uma transação tipo `adjustment` com a diferença entre
+ * o saldo real informado e o saldo computado pelo app. Se diferença = 0, no-op.
+ */
+export async function reconcileAccountAction(
+  raw: ReconcileAccountInput,
+): Promise<ActionResult<{ delta: number }>> {
+  const userId = await requireUserId();
+  const parsed = reconcileAccountSchema.safeParse(raw);
+  if (!parsed.success) {
+    const fieldErrors: Record<string, string> = {};
+    for (const issue of parsed.error.issues) {
+      const field = issue.path[0];
+      if (typeof field === "string" && !fieldErrors[field]) {
+        fieldErrors[field] = issue.message;
+      }
+    }
+    return { ok: false, error: "Dados inválidos", fieldErrors };
+  }
+
+  const { accountId, realBalance, date } = parsed.data;
+
+  const current = await computeAccountBalance(userId, accountId);
+  if (!current) return { ok: false, error: "Conta não encontrada" };
+
+  const real = Number(realBalance);
+  const delta = Number((real - current.balance).toFixed(2));
+
+  if (Math.abs(delta) < 0.005) {
+    return { ok: true, data: { delta: 0 } };
+  }
+
+  await db.insert(transactions).values({
+    userId,
+    financialAccountId: accountId,
+    categoryId: null,
+    type: "adjustment",
+    amount: delta.toFixed(2),
+    currency: current.currency,
+    date,
+    description: "Ajuste de saldo",
+    source: "manual",
+  });
+
+  revalidatePath("/contas");
+  revalidatePath("/transacoes");
+  revalidatePath("/dashboard");
+  return { ok: true, data: { delta } };
 }
