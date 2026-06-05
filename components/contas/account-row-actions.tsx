@@ -17,6 +17,7 @@ import {
   unarchiveFinancialAccountAction,
 } from "@/lib/actions/financial-accounts";
 import { AccountFormDialog } from "./account-form-dialog";
+import { ReconcileAccountDialog } from "./reconcile-account-dialog";
 import type { FinancialAccountType } from "@/types/financial-account";
 
 type Props = {
@@ -26,6 +27,8 @@ type Props = {
     type: FinancialAccountType;
     currency: string;
     openingBalance: string;
+    /** Saldo atual computado (opening + sum tx); usado pelo dialog de conciliação. */
+    computedBalance?: string;
     archived: boolean;
   };
 };
@@ -34,6 +37,8 @@ export function AccountRowActions({ account }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [editOpen, setEditOpen] = useState(false);
+  const [reconcileOpen, setReconcileOpen] = useState(false);
+  const canReconcile = !account.archived && account.computedBalance !== undefined;
 
   function toggleArchive() {
     startTransition(async () => {
@@ -80,6 +85,11 @@ export function AccountRowActions({ account }: Props) {
           />
           <DropdownMenuContent align="end">
             <DropdownMenuItem onClick={() => setEditOpen(true)}>Editar</DropdownMenuItem>
+            {canReconcile ? (
+              <DropdownMenuItem onClick={() => setReconcileOpen(true)}>
+                Conciliar saldo
+              </DropdownMenuItem>
+            ) : null}
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={toggleArchive}>
               {account.archived ? "Restaurar" : "Arquivar"}
@@ -93,6 +103,19 @@ export function AccountRowActions({ account }: Props) {
         open={editOpen}
         onOpenChange={setEditOpen}
       />
+
+      {canReconcile ? (
+        <ReconcileAccountDialog
+          open={reconcileOpen}
+          onOpenChange={setReconcileOpen}
+          account={{
+            id: account.id,
+            name: account.name,
+            currency: account.currency,
+            computedBalance: account.computedBalance!,
+          }}
+        />
+      ) : null}
     </>
   );
 }
