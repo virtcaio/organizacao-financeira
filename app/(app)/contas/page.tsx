@@ -10,7 +10,8 @@ import {
 import { NewAccountButton } from "@/components/contas/new-account-button";
 import { AccountRowActions } from "@/components/contas/account-row-actions";
 import { EmptyState } from "@/components/ui/empty-state";
-import { listFinancialAccountsAction } from "@/lib/actions/financial-accounts";
+import { listAccountsWithBalance } from "@/lib/db/queries/accounts";
+import { requireUserId } from "@/lib/auth-helpers";
 import {
   FINANCIAL_ACCOUNT_TYPE_LABELS,
   type FinancialAccountType,
@@ -20,7 +21,8 @@ import { formatCurrency } from "@/lib/format";
 export const metadata = { title: "Contas" };
 
 export default async function ContasPage() {
-  const accounts = await listFinancialAccountsAction();
+  const userId = await requireUserId();
+  const accounts = await listAccountsWithBalance(userId);
 
   return (
     <div className="space-y-6">
@@ -48,7 +50,7 @@ export default async function ContasPage() {
               <TableRow>
                 <TableHead>Nome</TableHead>
                 <TableHead>Tipo</TableHead>
-                <TableHead className="text-right">Saldo inicial</TableHead>
+                <TableHead className="text-right">Saldo atual</TableHead>
                 <TableHead className="w-12" />
               </TableRow>
             </TableHeader>
@@ -69,7 +71,7 @@ export default async function ContasPage() {
                     {FINANCIAL_ACCOUNT_TYPE_LABELS[a.type as FinancialAccountType]}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {formatCurrency(a.openingBalance, a.currency)}
+                    {formatCurrency(a.computedBalance, a.currency)}
                   </TableCell>
                   <TableCell>
                     <AccountRowActions
@@ -79,6 +81,7 @@ export default async function ContasPage() {
                         type: a.type as FinancialAccountType,
                         currency: a.currency,
                         openingBalance: a.openingBalance,
+                        computedBalance: a.computedBalance,
                         archived: a.archived,
                       }}
                     />

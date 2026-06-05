@@ -34,3 +34,13 @@ export const financialAccountInputSchema = z.object({
 });
 
 export type FinancialAccountInput = z.infer<typeof financialAccountInputSchema>;
+
+export const reconcileAccountSchema = z.object({
+  accountId: z.string().uuid("Conta inválida"),
+  realBalance: amountString,
+  date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida"),
+});
+
+export type ReconcileAccountInput = z.infer<typeof reconcileAccountSchema>;
