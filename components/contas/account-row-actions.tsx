@@ -26,6 +26,8 @@ type Props = {
     type: FinancialAccountType;
     currency: string;
     openingBalance: string;
+    /** Saldo atual computado (opening + sum tx); usado pelo dialog de conciliação. */
+    computedBalance?: string;
     archived: boolean;
   };
 };
