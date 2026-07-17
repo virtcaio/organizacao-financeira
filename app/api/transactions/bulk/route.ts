@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { isoDateString } from "@/types/iso-date";
 import { auth } from "@/lib/auth";
+import { clientIpFromHeaders, rateLimit } from "@/lib/rate-limit";
 import { db } from "@/lib/db";
 import { financialAccounts, transactions } from "@/lib/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
@@ -44,6 +45,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "Não autenticado" }, { status: 401 });
   }
   const userId = session.user.id;
+
+  const rl = rateLimit(`bulk:${userId}:${clientIpFromHeaders(req.headers)}`, {
+    limit: 30,
+    windowMs: 5 * 60_000,
+  });
+  if (!rl.ok) {
+    return NextResponse.json(
+      { ok: false, error: "Muitas requisições. Tente novamente em instantes." },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfterSeconds) } },
+    );
+  }
 
   let body: unknown;
   try {

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { clientIpFromHeaders, rateLimit } from "@/lib/rate-limit";
 import { parseOfx } from "@/lib/ofx/parse";
 import { detectEncoding } from "@/lib/ofx/encoding";
 
@@ -12,6 +13,16 @@ export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ ok: false, error: "Não autenticado" }, { status: 401 });
+  }
+  const rl = rateLimit(`ofx:${session.user.id}:${clientIpFromHeaders(req.headers)}`, {
+    limit: 20,
+    windowMs: 5 * 60_000,
+  });
+  if (!rl.ok) {
+    return NextResponse.json(
+      { ok: false, error: "Muitas requisições. Tente novamente em instantes." },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfterSeconds) } },
+    );
   }
 
   let formData: FormData;

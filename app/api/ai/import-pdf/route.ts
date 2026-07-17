@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import {
+  isLikelyAnthropicKey,
   buildAnthropicForRequest,
   DEFAULT_MODEL,
   sanitizeForLog,
 } from "@/lib/ai/server";
+import { clientIpFromHeaders, rateLimit } from "@/lib/rate-limit";
 import { buildImportPdfSystemPrompt } from "@/lib/ai/prompts/import-pdf";
 import {
   importPdfOutputSchema,
@@ -46,8 +48,19 @@ export async function POST(req: Request) {
   }
   const userId = session.user.id;
 
+  const rl = rateLimit(`import-pdf:${userId}:${clientIpFromHeaders(req.headers)}`, {
+    limit: 10,
+    windowMs: 5 * 60_000,
+  });
+  if (!rl.ok) {
+    return NextResponse.json(
+      { ok: false, error: "Muitas requisições. Tente novamente em instantes." },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfterSeconds) } },
+    );
+  }
+
   const apiKey = req.headers.get("x-anthropic-key")?.trim();
-  if (!apiKey || !apiKey.startsWith("sk-ant-")) {
+  if (!apiKey || !isLikelyAnthropicKey(apiKey)) {
     return NextResponse.json(
       { ok: false, error: "Chave Anthropic ausente. Configure em /configuracoes." },
       { status: 400 },

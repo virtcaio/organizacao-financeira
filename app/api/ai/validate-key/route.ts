@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import {
+  isLikelyAnthropicKey,
   buildAnthropicForRequest,
   DEFAULT_MODEL,
   sanitizeForLog,
 } from "@/lib/ai/server";
+import { clientIpFromHeaders, rateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,9 +16,21 @@ export async function POST(req: Request) {
   if (!session?.user?.id) {
     return NextResponse.json({ ok: false, error: "Não autenticado" }, { status: 401 });
   }
+  const userId = session.user.id;
+
+  const rl = rateLimit(`validate-key:${userId}:${clientIpFromHeaders(req.headers)}`, {
+    limit: 10,
+    windowMs: 60_000,
+  });
+  if (!rl.ok) {
+    return NextResponse.json(
+      { ok: false, error: "Muitas requisições. Tente novamente em instantes." },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfterSeconds) } },
+    );
+  }
 
   const apiKey = req.headers.get("x-anthropic-key")?.trim();
-  if (!apiKey || !apiKey.startsWith("sk-ant-")) {
+  if (!apiKey || !isLikelyAnthropicKey(apiKey)) {
     return NextResponse.json(
       { ok: false, error: "Chave ausente ou inválida no header." },
       { status: 400 },
