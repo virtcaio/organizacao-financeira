@@ -133,29 +133,36 @@ export function ImportOfxFlow({
     }
 
     setStatement(parsed);
-    setRows(
-      parsed.transactions.map((t: OfxTransaction) => ({
-        fitid: t.fitid,
+    // Bancos BR ocasionalmente repetem FITID no mesmo arquivo; sufixamos as
+    // repetições (#2, #3…) pra manter identidade de linha, React key e
+    // sourceRef únicos sem descartar transações legítimas.
+    const fitidCount = new Map<string, number>();
+    const draftRows: DraftRow[] = parsed.transactions.map((t: OfxTransaction) => {
+      const n = (fitidCount.get(t.fitid) ?? 0) + 1;
+      fitidCount.set(t.fitid, n);
+      return {
+        fitid: n > 1 ? `${t.fitid}#${n}` : t.fitid,
         date: t.date,
         description: t.description,
         amount: t.amount.toFixed(2),
         type: t.type,
         categoryId: null,
         ruleId: null,
-      })),
-    );
+      };
+    });
+    setRows(draftRows);
     setStep("review");
 
     // Auto-categoriza com IA se a chave estiver disponível
-    if (key && parsed.transactions.length > 0) {
+    if (key && draftRows.length > 0) {
       setAiBusy(true);
       const res = await categorizeImportedWithClaude({
         apiKey: key,
-        items: parsed.transactions.map((t) => ({
-          id: t.fitid,
-          description: t.description,
-          amount: t.amount,
-          type: t.type,
+        items: draftRows.map((r) => ({
+          id: r.fitid,
+          description: r.description,
+          amount: Number(r.amount),
+          type: r.type,
         })),
       });
       setAiBusy(false);

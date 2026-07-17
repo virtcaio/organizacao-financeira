@@ -83,6 +83,16 @@ export async function POST(req: Request) {
   const buffer = Buffer.from(arrayBuffer);
   const inputHash = hashInput(buffer);
 
+  // Catálogo atual do usuário — usado no prompt e pra validar os
+  // category_id devolvidos pela IA (ou pelo cache, que pode apontar pra
+  // categoria já excluída — sem isso o save do lote explode na FK).
+  const categories = await listCategoriesForUser(userId);
+  const validCategoryIds = new Set<string>();
+  for (const c of categories) {
+    validCategoryIds.add(c.id);
+    for (const ch of c.children) validCategoryIds.add(ch.id);
+  }
+
   // Dedup: mesmo PDF já processado antes? Reaproveita output, aplica regras atuais.
   const cached = await findAiRunCache(userId, "categorize_pdf", inputHash);
   if (cached) {
@@ -91,7 +101,7 @@ export async function POST(req: Request) {
       const rules = await listRulesForApply(userId);
       return NextResponse.json({
         ok: true,
-        data: applyRulesPostIA(reparsed.data, rules),
+        data: applyRulesPostIA(reparsed.data, rules, validCategoryIds),
         tokensIn: 0,
         tokensOut: 0,
         cacheReads: 0,
@@ -103,8 +113,6 @@ export async function POST(req: Request) {
 
   const base64 = buffer.toString("base64");
 
-  // System prompt with the user's category catalog
-  const categories = await listCategoriesForUser(userId);
   const system = buildImportPdfSystemPrompt(categories);
 
   const client = buildAnthropicForRequest(apiKey);
@@ -194,7 +202,7 @@ export async function POST(req: Request) {
 
   // Override pós-IA: regras locais sobrescrevem sugestões da IA quando casam.
   const rules = await listRulesForApply(userId);
-  const overridden = applyRulesPostIA(result.data, rules);
+  const overridden = applyRulesPostIA(result.data, rules, validCategoryIds);
 
   return NextResponse.json({
     ok: true,
@@ -210,14 +218,19 @@ export async function POST(req: Request) {
 function applyRulesPostIA(
   data: ImportPdfOutput,
   rules: CategorizationRule[],
+  validCategoryIds: Set<string>,
 ): ImportPdfOutput {
   return {
     ...data,
     transactions: data.transactions.map((tx) => {
       const match = findFirstMatchingRule(tx.description, rules);
-      return match
-        ? { ...tx, category_id: match.categoryId, rule_id: match.id }
-        : { ...tx, rule_id: null };
+      if (match) {
+        return { ...tx, category_id: match.categoryId, rule_id: match.id };
+      }
+      // IA/cache podem devolver id que não existe (mais) no catálogo — vira
+      // "Sem categoria" em vez de estourar a FK no save.
+      const valid = tx.category_id !== null && validCategoryIds.has(tx.category_id);
+      return { ...tx, category_id: valid ? tx.category_id : null, rule_id: null };
     }),
   };
 }

@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "tx_user_source_ref_uq" ON "transaction" USING btree ("user_id","financial_account_id","source","source_ref") WHERE "transaction"."source_ref" is not null;

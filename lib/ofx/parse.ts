@@ -36,12 +36,23 @@ export type OfxParseError =
   | "no_transactions"
   | "invalid_format";
 
+/** Decodifica entidades SGML/XML comuns ("H&amp;M" → "H&M"). */
+function decodeEntities(s: string): string {
+  return s
+    .replace(/&#(\d+);/g, (_, n: string) => String.fromCharCode(Number(n)))
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&apos;/gi, "'")
+    .replace(/&amp;/gi, "&");
+}
+
 function field(block: string, tag: string): string | null {
   // OFX 1.x (SGML) frequentemente omite a tag de fechamento — captura até
   // o próximo `<` ou quebra de linha.
   const re = new RegExp(`<${tag}>([^<\\n\\r]*)`);
   const m = block.match(re);
-  return m ? m[1].trim() : null;
+  return m ? decodeEntities(m[1].trim()) : null;
 }
 
 function parseDate(raw: string | null): string | null {
@@ -53,9 +64,30 @@ function parseDate(raw: string | null): string | null {
 
 function parseAmount(raw: string | null): number | null {
   if (!raw) return null;
-  // Alguns bancos BR emitem com vírgula como decimal
-  const normalized = raw.replace(/\s/g, "").replace(",", ".");
-  const n = Number(normalized);
+  // Bancos BR emitem vírgula decimal e às vezes separador de milhar
+  // ("1.234,56", "-1234,56", "1,234.56"). Sem tratar o milhar, "1.234,56"
+  // virava NaN e a transação era descartada em silêncio.
+  let s = raw.replace(/\s/g, "");
+  const lastComma = s.lastIndexOf(",");
+  const lastDot = s.lastIndexOf(".");
+  if (lastComma > -1 && lastDot > -1) {
+    // Ambos presentes: o que aparece por último é o decimal, o outro é milhar.
+    s =
+      lastComma > lastDot
+        ? s.replace(/\./g, "").replace(",", ".")
+        : s.replace(/,/g, "");
+  } else if (lastComma > -1) {
+    // Só vírgula: decimal (padrão BR); múltiplas vírgulas = milhar.
+    const parts = s.split(",");
+    s = parts.length === 2 ? parts.join(".") : parts.join("");
+  } else if (lastDot > -1) {
+    // Só ponto: decimal (padrão OFX); múltiplos pontos = milhar + decimal.
+    const parts = s.split(".");
+    if (parts.length > 2) {
+      s = parts.slice(0, -1).join("") + "." + parts[parts.length - 1];
+    }
+  }
+  const n = Number(s);
   return Number.isFinite(n) ? n : null;
 }
 

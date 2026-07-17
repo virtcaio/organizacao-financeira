@@ -280,10 +280,13 @@ function mergeSuggestions(
       };
     }
     const a = aiById.get(item.id);
+    // IA/cache podem devolver id fora do catálogo atual (ex.: categoria já
+    // excluída) — vira "Sem categoria" em vez de estourar a FK no save.
+    const valid = !!a?.category_id && catLabelById.has(a.category_id);
     return {
       id: item.id,
-      category_id: a?.category_id ?? null,
-      category_name: a?.category_name ?? null,
+      category_id: valid ? a!.category_id : null,
+      category_name: valid ? catLabelById.get(a!.category_id!) ?? null : null,
       rule_id: null,
     };
   });
