@@ -27,7 +27,7 @@ import {
 import { listCategoriesForUser } from "@/lib/db/queries/categories";
 import { listTagsForUser } from "@/lib/db/queries/tags";
 import { requireUserId } from "@/lib/auth-helpers";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { amountDisplay, formatCurrency, formatDate } from "@/lib/format";
 import { type TransactionType } from "@/types/transaction";
 import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
@@ -170,19 +170,7 @@ export default async function TransacoesPage({
               {transactions.map((t) => {
                 const isTransfer = t.type === "transfer";
                 const amountNum = Number(t.amount);
-                const isIncome = t.type === "income";
-                const valueClass = isTransfer
-                  ? "text-transfer"
-                  : isIncome
-                    ? "text-income"
-                    : "text-expense";
-                const sign = isTransfer
-                  ? amountNum < 0
-                    ? "− "
-                    : "+ "
-                  : isIncome
-                    ? "+ "
-                    : "− ";
+                const { sign, valueClass } = amountDisplay(t.type, amountNum);
                 return (
                   <TableRow key={t.id}>
                     <TableCell className="text-sm text-muted-foreground tabular-nums">

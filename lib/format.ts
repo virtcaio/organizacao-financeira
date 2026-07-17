@@ -23,6 +23,36 @@ export function formatCurrency(value: string | number, currency: string = "BRL")
   return formatter(currency).format(n);
 }
 
+export type AmountDisplayType =
+  | "income"
+  | "expense"
+  | "transfer"
+  | "investment"
+  | "adjustment";
+
+/**
+ * Sinal e classe de cor pra exibir um valor conforme o tipo de transação.
+ * `transfer` e `adjustment` armazenam o amount com sinal próprio;
+ * `income`/`expense`/`investment` armazenam positivo.
+ */
+export function amountDisplay(
+  type: AmountDisplayType,
+  amount: number,
+): { sign: "+ " | "− "; valueClass: string } {
+  if (type === "transfer") {
+    return { sign: amount < 0 ? "− " : "+ ", valueClass: "text-transfer" };
+  }
+  if (type === "adjustment") {
+    return amount < 0
+      ? { sign: "− ", valueClass: "text-expense" }
+      : { sign: "+ ", valueClass: "text-income" };
+  }
+  if (type === "income") {
+    return { sign: "+ ", valueClass: "text-income" };
+  }
+  return { sign: "− ", valueClass: "text-expense" };
+}
+
 export function formatDate(date: string | Date, opts?: Intl.DateTimeFormatOptions): string {
   // Strings ISO YYYY-MM-DD são parseadas explicitamente pra evitar a
   // ambiguidade de `new Date("YYYY-MM-DD")` (que vira UTC midnight e pode
