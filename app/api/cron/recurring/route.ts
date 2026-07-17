@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { recurringRules, transactions } from "@/lib/db/schema";
 import { todayIso } from "@/lib/date";
 import { nextRunDate, type RecurringFrequency } from "@/lib/recurring";
+import { generateBillDueAlerts, generateBudgetAlerts } from "@/lib/alerts/generate";
 
 /** Teto de ocorrências geradas por regra numa execução (catch-up). */
 const MAX_CATCHUP = 60;
@@ -96,9 +97,26 @@ async function handler(req: NextRequest) {
     }
   }
 
+  // Alertas (sino): orçamento em atenção/estourado + contas a vencer.
+  // Best-effort — falha aqui não pode derrubar a geração de recorrências.
+  let alertsCreated = 0;
+  try {
+    const [budgetAlerts, billAlerts] = await Promise.all([
+      generateBudgetAlerts(),
+      generateBillDueAlerts(),
+    ]);
+    alertsCreated = budgetAlerts + billAlerts;
+  } catch {
+    // intencional — alertas são telemetria de conveniência
+  }
+
   return NextResponse.json({
     ok: true,
-    data: { rulesProcessed: due.length, transactionsGenerated: generated },
+    data: {
+      rulesProcessed: due.length,
+      transactionsGenerated: generated,
+      alertsCreated,
+    },
   });
 }
 
