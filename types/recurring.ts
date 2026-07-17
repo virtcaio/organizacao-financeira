@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { normalizeAmountInput } from "@/types/amount";
 import { RECURRING_FREQUENCIES } from "@/lib/recurring";
 import { TRANSACTION_TYPES } from "@/types/transaction";
 
@@ -13,7 +14,7 @@ const optionalUuid = z
 const amountString = z
   .string()
   .trim()
-  .transform((v) => v.replace(",", "."))
+  .transform(normalizeAmountInput)
   .refine((v) => /^\d+(\.\d{1,2})?$/.test(v), "Valor inválido")
   .refine((v) => Number(v) > 0, "Valor precisa ser maior que zero");
 

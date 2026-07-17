@@ -15,8 +15,14 @@ describe("amountString", () => {
     expect(amountString.parse("1000")).toBe("1000");
   });
 
-  it("rejeita zero, negativo, milhar e 3 casas", () => {
-    for (const v of ["0", "-5", "1.234,56", "1.999", "abc", ""]) {
+  it("aceita formato BR com milhar (issue #61)", () => {
+    expect(amountString.parse("1.234,56")).toBe("1234.56");
+    expect(amountString.parse("1.000")).toBe("1000");
+    expect(amountString.parse("R$ 1.000,50")).toBe("1000.50");
+  });
+
+  it("rejeita zero, negativo, 3 casas decimais e lixo", () => {
+    for (const v of ["0", "-5", "0,500", "abc", ""]) {
       expect(amountString.safeParse(v).success, `valor: ${v}`).toBe(false);
     }
   });
