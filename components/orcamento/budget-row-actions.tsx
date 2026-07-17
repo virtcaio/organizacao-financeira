@@ -163,7 +163,7 @@ export function BudgetRowActions({ row, month, monthLabel, categories }: Props) 
             <AlertDialogAction
               onClick={removeTemplate}
               disabled={isPending}
-              className="bg-destructive text-white hover:bg-destructive/90"
+              variant="destructive"
             >
               {isPending ? LOADING_TEXT.delete : "Remover"}
             </AlertDialogAction>

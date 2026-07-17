@@ -274,6 +274,7 @@ export default async function TransacoesPage({
                         })()
                       ) : (
                         <TransactionRowActions
+                          editable={t.type === "income" || t.type === "expense"}
                           transaction={{
                             id: t.id,
                             type: t.type as TransactionType,

@@ -32,7 +32,7 @@ test("CRUD de categorias custom + arquivar seeds", async ({ page }) => {
   ).toBeVisible();
 
   // 1. Criar categoria-mãe custom "Hobby Caro" (Despesa)
-  await page.getByRole("button", { name: /^Nova$/i }).first().click();
+  await page.getByRole("button", { name: /^Nova categoria$/i }).first().click();
   await expect(page.getByRole("heading", { name: "Nova categoria" })).toBeVisible();
   await page.getByRole("button", { name: /Categoria-mãe/i }).click();
   // Tipo já default "expense"; nome + ícone
@@ -45,7 +45,7 @@ test("CRUD de categorias custom + arquivar seeds", async ({ page }) => {
   await expect(hobbyRow).toBeVisible();
 
   // 2. Criar subcategoria custom "Sushi de Domingo" sob "Alimentação"
-  await page.getByRole("button", { name: /^Nova$/i }).first().click();
+  await page.getByRole("button", { name: /^Nova categoria$/i }).first().click();
   await expect(page.getByRole("heading", { name: "Nova categoria" })).toBeVisible();
   await page.getByRole("button", { name: /Subcategoria/i }).click();
   // Open select de categoria-mãe

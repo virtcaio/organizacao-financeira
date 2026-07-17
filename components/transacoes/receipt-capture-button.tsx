@@ -77,7 +77,7 @@ export function ReceiptCaptureButton({
         ) : (
           <>
             <CameraIcon className="mr-2 size-4" />
-            Foto
+            Ler comprovante
           </>
         )}
       </Button>
