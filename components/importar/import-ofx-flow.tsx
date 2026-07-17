@@ -411,7 +411,7 @@ export function ImportOfxFlow({
             </div>
           ) : null}
 
-          <div className="rounded-lg border">
+          <div className="overflow-x-auto rounded-lg border">
             <table className="w-full text-sm">
               <thead className="bg-muted/50">
                 <tr className="text-left text-xs text-muted-foreground">
@@ -428,6 +428,7 @@ export function ImportOfxFlow({
                   <OfxRow
                     key={r.fitid}
                     row={r}
+                    currency={currency}
                     categories={categories}
                     onChange={(patch) => updateRow(r.fitid, patch)}
                     onRemove={() => removeRow(r.fitid)}
@@ -484,6 +485,7 @@ export function ImportOfxFlow({
 
 function OfxRow({
   row,
+  currency,
   categories,
   onChange,
   onRemove,
@@ -492,6 +494,7 @@ function OfxRow({
   aiBusy,
 }: {
   row: DraftRow;
+  currency: string;
   categories: CategoryNode[];
   onChange: (patch: Partial<DraftRow>) => void;
   onRemove: () => void;
@@ -599,7 +602,7 @@ function OfxRow({
         }`}
       >
         {row.type === "income" ? "+ " : "− "}
-        {row.amount}
+        {formatCurrency(row.amount, currency)}
       </td>
       <td className="px-3 py-2">
         <Button
@@ -611,6 +614,7 @@ function OfxRow({
           disabled={disabled}
         >
           <TrashIcon className="size-3.5" />
+          <span className="sr-only">Remover linha</span>
         </Button>
       </td>
     </tr>

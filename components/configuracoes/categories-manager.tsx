@@ -47,7 +47,7 @@ export function CategoriesManager({
         </div>
         <Button size="sm" onClick={() => setNewOpen(true)}>
           <PlusIcon className="mr-1.5 size-3.5" />
-          Nova
+          Nova categoria
         </Button>
       </CardHeader>
       <CardContent className="space-y-6">

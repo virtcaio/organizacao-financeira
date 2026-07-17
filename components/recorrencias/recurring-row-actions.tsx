@@ -122,7 +122,7 @@ export function RecurringRowActions({ rule, paused, accounts, categories }: Prop
             <AlertDialogAction
               onClick={onConfirmDelete}
               disabled={isPending}
-              className="bg-destructive text-white hover:bg-destructive/90"
+              variant="destructive"
             >
               {isPending ? LOADING_TEXT.delete : "Excluir"}
             </AlertDialogAction>
