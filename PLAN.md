@@ -173,7 +173,7 @@ Mestre de fases e acompanhamento. Spec em [`PRD.md`](./PRD.md), convenções em 
 - [ ] Visualização da fatura atual e próximas faturas
 - [ ] Pagamento de fatura: gera transferência da conta corrente → cartão
 - [ ] Metas financeiras: criar (alvo, prazo, conta destino); aporte manual; barra de progresso; alerta quando atingida
-- [ ] Alertas in-app (sino no header): orçamento estourado (80%/100%), conta a vencer, fatura fechou, meta atingida
+- [x] Alertas in-app (#69): sino no header + /alertas; orçamento 80%/100% e conta a vencer gerados no cron diário com dedup. Fatura fechou/meta atingida entram quando cartão/metas existirem.
 - [x] Aprendizado de categorização (#37): regra `categorization_rule` (pattern → categoria) criada a partir de correções (nos fluxos PDF/OFX e manual), aplicada como pre-pass antes da IA, gestão em /configuracoes com priority e hit count
 
 **Critério de aceite:** parcelo uma compra de R$ 1.200 em 4x, vejo 4 transações futuras, fatura mostra o valor certo. Corrijo "iFood" pra Alimentação > Restaurantes uma vez, próxima importação já vem certo sem mexer no Claude.

@@ -31,6 +31,7 @@ Versão pública do plano. Para detalhes técnicos, histórico de decisões e co
 - **Filtros completos na listagem** (período, conta, categoria, tag, busca) com paginação
 - **Conciliação de saldo** — ajuste gera transação `adjustment`; coluna de saldo atual em /contas
 - **Gestão de categorias** — categorias custom + arquivar seeds
+- **Alertas in-app** — sino no header + página /alertas; orçamento ≥80%/100% e recorrências a vencer, gerados no cron diário com dedup
 
 ### Qualidade
 - Suite E2E Playwright (smoke, categorias, regras, conciliação, filtros) **rodando no CI** com Postgres dedicado
@@ -40,7 +41,6 @@ Versão pública do plano. Para detalhes técnicos, histórico de decisões e co
 
 ## 🚧 Now (próximas iterações)
 
-- **Alertas in-app (sino)** ([#55](https://github.com/virtcaio/organizacao-financeira/issues/55)) — persistir estouro de orçamento e recorrências próximas na tabela `alert` (já existe no schema); fecha o loop das features entregues.
 - **Cartão de crédito** ([#7](https://github.com/virtcaio/organizacao-financeira/issues/7)) — fechamento e vencimento, visão de fatura, parcelamento (`installment_*` já flui do import até o banco).
 - **Importação de CSV** ([#56](https://github.com/virtcaio/organizacao-financeira/issues/56)) — reusa o fluxo OFX + categorização IA (o hub já promete na UI).
 
