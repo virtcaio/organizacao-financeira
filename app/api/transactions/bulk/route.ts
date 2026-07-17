@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { isoDateString } from "@/types/iso-date";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { financialAccounts, transactions } from "@/lib/db/schema";
@@ -21,7 +22,7 @@ const rowSchema = z.object({
     .refine((v) => /^\d+(\.\d{1,2})?$/.test(v), "Valor inválido")
     .refine((v) => Number(v) > 0, "Valor precisa ser maior que zero"),
   currency: z.enum(["BRL", "USD", "EUR"]),
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida"),
+  date: isoDateString,
   description: z.string().trim().min(1).max(200),
   notes: z.string().trim().max(1000).nullable().optional(),
   installmentSeq: z.number().int().positive().nullable().optional(),
