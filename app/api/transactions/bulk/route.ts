@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { financialAccounts, transactions } from "@/lib/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { incrementHitCounts } from "@/lib/db/queries/categorization-rules";
+import { categoriesAreAccessible } from "@/lib/db/queries/categories";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -77,6 +78,17 @@ export async function POST(req: Request) {
         { status: 400 },
       );
     }
+  }
+
+  // Mesma checagem pra categorias (seed ou do próprio usuário).
+  const categoryIds = rows
+    .map((r) => r.categoryId)
+    .filter((v): v is string => !!v);
+  if (!(await categoriesAreAccessible(userId, categoryIds))) {
+    return NextResponse.json(
+      { ok: false, error: "Categoria inválida no lote." },
+      { status: 400 },
+    );
   }
 
   // Dedup: pra linhas com sourceRef, checa se já existe (userId, account,

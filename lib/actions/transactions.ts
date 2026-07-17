@@ -13,6 +13,10 @@ import {
 import { requireUserId } from "@/lib/auth-helpers";
 import { transactionInputSchema, transferInputSchema } from "@/types/transaction";
 import { getTagsByTransactionIds } from "@/lib/db/queries/tags";
+import {
+  categoriesAreAccessible,
+  categoryIsAccessible,
+} from "@/lib/db/queries/categories";
 import type { Tag } from "@/types/tag";
 import { randomUUID } from "node:crypto";
 import { removeReceipt, isOwnReceiptKey } from "@/lib/storage";
@@ -26,22 +30,26 @@ async function syncTransactionTags(
   transactionId: string,
   tagIds: string[] | undefined,
 ) {
-  await db
-    .delete(transactionTags)
-    .where(eq(transactionTags.transactionId, transactionId));
+  let ownedIds: string[] = [];
+  if (tagIds && tagIds.length > 0) {
+    const owned = await db
+      .select({ id: tags.id })
+      .from(tags)
+      .where(and(eq(tags.userId, userId), inArray(tags.id, tagIds)));
+    ownedIds = owned.map((t) => t.id);
+  }
 
-  if (!tagIds || tagIds.length === 0) return;
-
-  const owned = await db
-    .select({ id: tags.id })
-    .from(tags)
-    .where(and(eq(tags.userId, userId), inArray(tags.id, tagIds)));
-  const ownedIds = owned.map((t) => t.id);
-  if (ownedIds.length === 0) return;
-
-  await db
-    .insert(transactionTags)
-    .values(ownedIds.map((tagId) => ({ transactionId, tagId })));
+  // Delete + insert na mesma transação: falha no meio não pode perder as tags.
+  await db.transaction(async (tx) => {
+    await tx
+      .delete(transactionTags)
+      .where(eq(transactionTags.transactionId, transactionId));
+    if (ownedIds.length > 0) {
+      await tx
+        .insert(transactionTags)
+        .values(ownedIds.map((tagId) => ({ transactionId, tagId })));
+    }
+  });
 }
 
 export type ActionResult<T = void> =
@@ -173,6 +181,10 @@ export async function createTransactionAction(
     return { ok: false, error: "Conta não encontrada" };
   }
 
+  if (data.categoryId && !(await categoryIsAccessible(userId, data.categoryId))) {
+    return { ok: false, error: "Categoria não encontrada" };
+  }
+
   // Comprovante anexado (vindo do OCR). Só aceita key do próprio usuário.
   const hasReceipt = !!data.receiptKey && isOwnReceiptKey(data.receiptKey, userId);
 
@@ -216,6 +228,25 @@ export async function updateTransactionAction(
 
   const data = parsed.data;
 
+  // Mesma defense-in-depth do create: conta e categoria precisam ser do usuário.
+  const [account] = await db
+    .select({ id: financialAccounts.id })
+    .from(financialAccounts)
+    .where(
+      and(
+        eq(financialAccounts.id, data.financialAccountId),
+        eq(financialAccounts.userId, userId),
+      ),
+    )
+    .limit(1);
+  if (!account) {
+    return { ok: false, error: "Conta não encontrada" };
+  }
+
+  if (data.categoryId && !(await categoryIsAccessible(userId, data.categoryId))) {
+    return { ok: false, error: "Categoria não encontrada" };
+  }
+
   const result = await db
     .update(transactions)
     .set({
@@ -245,12 +276,18 @@ export async function updateTransactionAction(
 export async function deleteTransactionAction(id: string): Promise<ActionResult> {
   const userId = await requireUserId();
 
-  // Lê o comprovante antes de apagar — pra remover o arquivo do Storage.
+  // Lê tipo e comprovante antes de apagar — pra recusar perna de transferência
+  // e remover o arquivo do Storage.
   const [existing] = await db
-    .select({ sourceRef: transactions.sourceRef })
+    .select({ type: transactions.type, sourceRef: transactions.sourceRef })
     .from(transactions)
     .where(and(eq(transactions.id, id), eq(transactions.userId, userId)))
     .limit(1);
+
+  // Perna de transferência não pode ser excluída sozinha (deixaria a outra órfã).
+  if (existing?.type === "transfer") {
+    return { ok: false, error: "Use as ações de transferência para excluir o par" };
+  }
 
   const result = await db
     .delete(transactions)
@@ -385,7 +422,7 @@ export async function updateTransferAction(
       const [current] = await tx
         .select({ amount: transactions.amount })
         .from(transactions)
-        .where(eq(transactions.id, id))
+        .where(and(eq(transactions.id, id), eq(transactions.userId, userId)))
         .limit(1);
       const isOutgoing = current ? Number(current.amount) < 0 : false;
       await tx
@@ -489,6 +526,14 @@ export async function createTransactionsBulkAction(
     if (!ownedSet.has(id)) {
       return { ok: false, error: "Conta inválida no lote." };
     }
+  }
+
+  // Mesma checagem pra categorias (seed ou do próprio usuário).
+  const categoryIds = rows
+    .map((r) => r.categoryId)
+    .filter((v): v is string => !!v);
+  if (!(await categoriesAreAccessible(userId, categoryIds))) {
+    return { ok: false, error: "Categoria inválida no lote." };
   }
 
   // Dedup: pra linhas com sourceRef, checa se já existe (userId, account,
