@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { categories, financialAccounts, transactions } from "@/lib/db/schema";
 import { signedSumExpr } from "@/lib/db/queries/accounts";
@@ -152,7 +152,7 @@ export async function getCategoryBreakdownBRL(
     ? await db
         .select({ id: categories.id, name: categories.name })
         .from(categories)
-        .where(eq(categories.archived, false))
+        .where(inArray(categories.id, parentIds))
     : [];
   const parentNameById = new Map(parents.map((p) => [p.id, p.name]));
 

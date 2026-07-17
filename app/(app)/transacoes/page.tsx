@@ -16,7 +16,11 @@ import { TransferRowActions } from "@/components/transacoes/transfer-row-actions
 import { TransactionFiltersBar } from "@/components/transacoes/transaction-filters-bar";
 import { ActiveFiltersChips } from "@/components/transacoes/active-filters-chips";
 import { TagBadge } from "@/components/transacoes/tag-badge";
-import { applyFilters, hasAnyFilter, parseFilters } from "@/lib/transactions/filter";
+import {
+  expandCategoryFilter,
+  hasAnyFilter,
+  parseFilters,
+} from "@/lib/transactions/filter";
 import type { TransferDraft } from "@/components/transacoes/transfer-form-dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
@@ -45,22 +49,23 @@ const TYPE_LABEL: Record<string, string> = {
 /** Monta o draft de edição de transferência cruzando as duas linhas do par. */
 function buildTransferDraft(
   line: TransactionListItem,
-  byId: Map<string, TransactionListItem>,
+  pairById: Map<string, { accountId: string; amount: string }>,
 ): TransferDraft | null {
   if (line.type !== "transfer" || !line.transferPairId) return null;
-  const pair = byId.get(line.transferPairId);
+  const pair = pairById.get(line.transferPairId);
   if (!pair) return null;
-  const out = Number(line.amount) < 0 ? line : pair;
-  const inc = Number(line.amount) < 0 ? pair : line;
+  const lineIsOut = Number(line.amount) < 0;
   return {
     lineId: line.id,
-    fromAccountId: out.accountId,
-    toAccountId: inc.accountId,
-    amount: Math.abs(Number(out.amount)).toFixed(2),
+    fromAccountId: lineIsOut ? line.accountId : pair.accountId,
+    toAccountId: lineIsOut ? pair.accountId : line.accountId,
+    amount: Math.abs(Number(line.amount)).toFixed(2),
     date: line.date,
     description: line.description,
   };
 }
+
+const PAGE_SIZE = 50;
 
 export default async function TransacoesPage({
   searchParams,
@@ -72,24 +77,53 @@ export default async function TransacoesPage({
     account?: string;
     category?: string;
     q?: string;
+    page?: string;
   }>;
 }) {
   const userId = await requireUserId();
   const params = await searchParams;
-  const [allTransactions, accounts, categories, tags] = await Promise.all([
-    listTransactionsAction(),
+  const [accounts, categories, tags] = await Promise.all([
     listAccountsForPickerAction(),
     listCategoriesForUser(userId),
     listTagsForUser(userId),
   ]);
 
   const filters = parseFilters(params, accounts, categories, tags);
-  const transactions = applyFilters(allTransactions, filters, categories);
   const anyFilter = hasAnyFilter(filters);
+  const page = Math.max(Number(params.page) || 1, 1);
 
-  const byId = new Map(allTransactions.map((t) => [t.id, t]));
+  const { rows: transactions, pairs, totalFiltered, totalAll } =
+    await listTransactionsAction({
+      filters: {
+        from: filters.from,
+        to: filters.to,
+        accountId: filters.accountId,
+        categoryIds: filters.categoryId
+          ? Array.from(expandCategoryFilter(filters.categoryId, categories))
+          : undefined,
+        q: filters.q,
+        tagId: filters.tagId,
+      },
+      page,
+      pageSize: PAGE_SIZE,
+    });
+
+  const totalPages = Math.max(Math.ceil(totalFiltered / PAGE_SIZE), 1);
+  const pairById = new Map<string, { accountId: string; amount: string }>();
+  for (const t of transactions) pairById.set(t.id, { accountId: t.accountId, amount: t.amount });
+  for (const p of pairs) pairById.set(p.id, { accountId: p.accountId, amount: p.amount });
   const hasAccount = accounts.length > 0;
   const canTransfer = accounts.length >= 2;
+
+  const pageHref = (n: number) => {
+    const sp = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) {
+      if (v && k !== "page") sp.set(k, v);
+    }
+    if (n > 1) sp.set("page", String(n));
+    const qs = sp.toString();
+    return qs ? `/transacoes?${qs}` : "/transacoes";
+  };
 
   return (
     <div className="space-y-6">
@@ -119,7 +153,7 @@ export default async function TransacoesPage({
         </div>
       </header>
 
-      {hasAccount && allTransactions.length > 0 ? (
+      {hasAccount && totalAll > 0 ? (
         <div className="space-y-2">
           <TransactionFiltersBar
             accounts={accounts}
@@ -138,7 +172,7 @@ export default async function TransacoesPage({
 
       {!hasAccount ? (
         <EmptyAccounts />
-      ) : allTransactions.length === 0 ? (
+      ) : totalAll === 0 ? (
         <EmptyTransactions accounts={accounts} categories={categories} tags={tags} />
       ) : transactions.length === 0 ? (
         <EmptyState
@@ -233,7 +267,7 @@ export default async function TransacoesPage({
                     <TableCell>
                       {isTransfer ? (
                         (() => {
-                          const draft = buildTransferDraft(t, byId);
+                          const draft = buildTransferDraft(t, pairById);
                           return draft ? (
                             <TransferRowActions transfer={draft} accounts={accounts} />
                           ) : null;
@@ -268,18 +302,47 @@ export default async function TransacoesPage({
       )}
 
       {transactions.length > 0 ? (
-        <p className="text-xs text-muted-foreground">
-          {transactions.length} transaç{transactions.length === 1 ? "ão" : "ões"}
-          {anyFilter ? " (filtrado)" : ""} ·{" "}
-          {Object.entries(
-            transactions.reduce<Record<string, number>>((acc, t) => {
-              acc[t.type] = (acc[t.type] ?? 0) + 1;
-              return acc;
-            }, {}),
-          )
-            .map(([k, v]) => `${v} ${TYPE_LABEL[k] ?? k}${v > 1 ? "s" : ""}`)
-            .join(" · ")}
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-xs text-muted-foreground">
+            {totalFiltered} transaç{totalFiltered === 1 ? "ão" : "ões"}
+            {anyFilter ? " (filtrado)" : ""} ·{" "}
+            {Object.entries(
+              transactions.reduce<Record<string, number>>((acc, t) => {
+                acc[t.type] = (acc[t.type] ?? 0) + 1;
+                return acc;
+              }, {}),
+            )
+              .map(([k, v]) => `${v} ${TYPE_LABEL[k] ?? k}${v > 1 ? "s" : ""}`)
+              .join(" · ")}
+            {totalPages > 1 ? " nesta página" : ""}
+          </p>
+          {totalPages > 1 ? (
+            <nav
+              className="flex items-center gap-2 text-xs"
+              aria-label="Paginação"
+            >
+              {page > 1 ? (
+                <Link
+                  href={pageHref(page - 1)}
+                  className={buttonVariants({ variant: "outline", size: "sm" })}
+                >
+                  Anterior
+                </Link>
+              ) : null}
+              <span className="text-muted-foreground tabular-nums">
+                Página {page} de {totalPages}
+              </span>
+              {page < totalPages ? (
+                <Link
+                  href={pageHref(page + 1)}
+                  className={buttonVariants({ variant: "outline", size: "sm" })}
+                >
+                  Próxima
+                </Link>
+              ) : null}
+            </nav>
+          ) : null}
+        </div>
       ) : null}
     </div>
   );
