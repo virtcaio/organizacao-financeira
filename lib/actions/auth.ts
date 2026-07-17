@@ -1,16 +1,29 @@
 "use server";
 
+import { headers } from "next/headers";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import { signUpSchema } from "@/types/auth";
+import { clientIpFromHeaders, rateLimit } from "@/lib/rate-limit";
 
 export type RegisterResult =
   | { ok: true }
   | { ok: false; error: string; field?: "name" | "email" | "password" | "confirmPassword" };
 
 export async function registerUserAction(formData: FormData): Promise<RegisterResult> {
+  // Flood de cadastro: 10 por IP a cada 15 min (a suite E2E cria 5+ usuários
+  // do mesmo IP em minutos — não apertar sem ajustar os specs).
+  const ip = clientIpFromHeaders(await headers());
+  const rl = rateLimit(`register:${ip}`, { limit: 10, windowMs: 15 * 60_000 });
+  if (!rl.ok) {
+    return {
+      ok: false,
+      error: "Muitas tentativas. Aguarde alguns minutos e tente de novo.",
+    };
+  }
+
   const raw = {
     name: formData.get("name"),
     email: formData.get("email"),

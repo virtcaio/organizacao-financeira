@@ -15,6 +15,7 @@ import {
   char,
   varchar,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import type { AdapterAccount } from "next-auth/adapters";
 
 // =============================================================================
@@ -240,6 +241,11 @@ export const transactions = pgTable(
     index("tx_user_account_idx").on(t.userId, t.financialAccountId),
     index("tx_user_category_idx").on(t.userId, t.categoryId),
     index("tx_installment_group_idx").on(t.installmentGroupId),
+    // Dedup atômico de importação: o check-then-insert do bulk não segura
+    // requests concorrentes — a constraint é a barreira final.
+    uniqueIndex("tx_user_source_ref_uq")
+      .on(t.userId, t.financialAccountId, t.source, t.sourceRef)
+      .where(sql`${t.sourceRef} is not null`),
   ],
 );
 
@@ -267,7 +273,12 @@ export const transactionTags = pgTable(
       .notNull()
       .references(() => tags.id, { onDelete: "cascade" }),
   },
-  (t) => [primaryKey({ columns: [t.transactionId, t.tagId] })],
+  (t) => [
+    primaryKey({ columns: [t.transactionId, t.tagId] }),
+    // A PK começa por transaction_id — sem este índice, o CASCADE de excluir
+    // uma tag (e o filtro ?tag=) varre a tabela inteira por tag_id.
+    index("transaction_tag_tag_idx").on(t.tagId),
+  ],
 );
 
 export const recurringRules = pgTable(
@@ -296,7 +307,14 @@ export const recurringRules = pgTable(
     paused: boolean("paused").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("recurring_user_next_idx").on(t.userId, t.nextRunAt)],
+  (t) => [
+    index("recurring_user_next_idx").on(t.userId, t.nextRunAt),
+    // O cron busca `paused = false AND next_run_at <= hoje` sem userId —
+    // sem este índice parcial é seq scan da tabela inteira a cada execução.
+    index("recurring_due_idx")
+      .on(t.nextRunAt)
+      .where(sql`${t.paused} = false`),
+  ],
 );
 
 export const categorizationRules = pgTable(
@@ -332,7 +350,10 @@ export const budgets = pgTable(
     limitAmount: numeric("limit_amount", { precision: 14, scale: 2 }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [uniqueIndex("budget_user_cat_month_uq").on(t.userId, t.categoryId, t.month)],
+  (t) => [
+    uniqueIndex("budget_user_cat_month_uq").on(t.userId, t.categoryId, t.month),
+    index("budget_user_month_idx").on(t.userId, t.month),
+  ],
 );
 
 // Orçamento padrão recorrente: vale pra todo mês, salvo override em `budget`.

@@ -7,6 +7,7 @@ import { recurringRules, financialAccounts } from "@/lib/db/schema";
 import { requireUserId } from "@/lib/auth-helpers";
 import { recurringRuleInputSchema } from "@/types/recurring";
 import { listRecurringRulesForUser } from "@/lib/db/queries/recurring";
+import { categoryIsAccessible } from "@/lib/db/queries/categories";
 
 export type ActionResult<T = void> =
   | { ok: true; data: T }
@@ -23,6 +24,23 @@ function collectFieldErrors(
     }
   }
   return fieldErrors;
+}
+
+/**
+ * Materializa a âncora do dia pra monthly/yearly quando o usuário não informa:
+ * sem isso, `nextRunDate` usa o dia corrente já clampado e uma regra iniciada
+ * em 31/01 "drifta" pra 28 permanentemente após fevereiro.
+ */
+function resolveDayOfMonth(
+  frequency: string,
+  dayOfMonth: number | null | undefined,
+  startDate: string,
+): number | null {
+  if (dayOfMonth) return dayOfMonth;
+  if (frequency === "monthly" || frequency === "yearly") {
+    return Number(startDate.slice(8, 10));
+  }
+  return null;
 }
 
 export async function listRecurringRulesAction() {
@@ -58,6 +76,10 @@ export async function createRecurringRuleAction(
     return { ok: false, error: "Conta não encontrada" };
   }
 
+  if (d.categoryId && !(await categoryIsAccessible(userId, d.categoryId))) {
+    return { ok: false, error: "Categoria não encontrada" };
+  }
+
   const [row] = await db
     .insert(recurringRules)
     .values({
@@ -70,7 +92,7 @@ export async function createRecurringRuleAction(
       description: d.description,
       frequency: d.frequency,
       interval: d.interval,
-      dayOfMonth: d.dayOfMonth ?? null,
+      dayOfMonth: resolveDayOfMonth(d.frequency, d.dayOfMonth, d.startDate),
       nextRunAt: d.startDate,
       endDate: d.endDate ?? null,
     })
@@ -96,6 +118,25 @@ export async function updateRecurringRuleAction(
   }
   const d = parsed.data;
 
+  // Mesma defense-in-depth do create: conta e categoria precisam ser do usuário.
+  const [account] = await db
+    .select({ id: financialAccounts.id })
+    .from(financialAccounts)
+    .where(
+      and(
+        eq(financialAccounts.id, d.financialAccountId),
+        eq(financialAccounts.userId, userId),
+      ),
+    )
+    .limit(1);
+  if (!account) {
+    return { ok: false, error: "Conta não encontrada" };
+  }
+
+  if (d.categoryId && !(await categoryIsAccessible(userId, d.categoryId))) {
+    return { ok: false, error: "Categoria não encontrada" };
+  }
+
   const result = await db
     .update(recurringRules)
     .set({
@@ -107,7 +148,7 @@ export async function updateRecurringRuleAction(
       description: d.description,
       frequency: d.frequency,
       interval: d.interval,
-      dayOfMonth: d.dayOfMonth ?? null,
+      dayOfMonth: resolveDayOfMonth(d.frequency, d.dayOfMonth, d.startDate),
       nextRunAt: d.startDate,
       endDate: d.endDate ?? null,
     })

@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, eq, isNull, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   budgets,
@@ -182,4 +182,45 @@ export async function countCategoryUsage(
     rules: cr,
     total: tx + bg + bt + rr + cr,
   };
+}
+
+/**
+ * Categoria existe e é acessível pro user (seed do sistema ou própria)?
+ * Defense-in-depth (§5.8 do CLAUDE.md): FKs só exigem existência, então sem
+ * este check um categoryId de outro usuário passaria a referenciar dados alheios.
+ */
+export async function categoryIsAccessible(
+  userId: string,
+  categoryId: string,
+): Promise<boolean> {
+  const [row] = await db
+    .select({ id: categories.id })
+    .from(categories)
+    .where(
+      and(
+        eq(categories.id, categoryId),
+        or(isNull(categories.userId), eq(categories.userId, userId)),
+      ),
+    )
+    .limit(1);
+  return !!row;
+}
+
+/** Variante em lote de `categoryIsAccessible` — true se TODAS forem acessíveis. */
+export async function categoriesAreAccessible(
+  userId: string,
+  categoryIds: string[],
+): Promise<boolean> {
+  const distinct = Array.from(new Set(categoryIds));
+  if (distinct.length === 0) return true;
+  const rows = await db
+    .select({ id: categories.id })
+    .from(categories)
+    .where(
+      and(
+        inArray(categories.id, distinct),
+        or(isNull(categories.userId), eq(categories.userId, userId)),
+      ),
+    );
+  return rows.length === distinct.length;
 }

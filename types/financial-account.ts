@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { normalizeAmountInput } from "@/types/amount";
 
 export const FINANCIAL_ACCOUNT_TYPES = [
   "checking",
@@ -23,7 +24,7 @@ export const SUPPORTED_CURRENCIES = ["BRL", "USD", "EUR"] as const;
 const amountString = z
   .string()
   .trim()
-  .transform((v) => v.replace(",", "."))
+  .transform(normalizeAmountInput)
   .refine((v) => /^-?\d+(\.\d{1,2})?$/.test(v), "Valor monetário inválido");
 
 export const financialAccountInputSchema = z.object({

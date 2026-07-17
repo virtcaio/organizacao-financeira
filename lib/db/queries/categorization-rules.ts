@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { categories, categorizationRules } from "@/lib/db/schema";
 import type { CategoryKind } from "@/types/category";
@@ -61,17 +61,13 @@ export async function listRulesForApply(userId: string): Promise<CategorizationR
 /** Incrementa hitCount em bulk. Caller é responsável por deduplicar ids. */
 export async function incrementHitCounts(userId: string, ruleIds: string[]): Promise<void> {
   if (ruleIds.length === 0) return;
-  await Promise.all(
-    ruleIds.map((id) =>
-      db
-        .update(categorizationRules)
-        .set({ hitCount: sql`${categorizationRules.hitCount} + 1` })
-        .where(
-          and(
-            eq(categorizationRules.id, id),
-            eq(categorizationRules.userId, userId),
-          ),
-        ),
-    ),
-  );
+  await db
+    .update(categorizationRules)
+    .set({ hitCount: sql`${categorizationRules.hitCount} + 1` })
+    .where(
+      and(
+        eq(categorizationRules.userId, userId),
+        inArray(categorizationRules.id, ruleIds),
+      ),
+    );
 }

@@ -33,7 +33,7 @@ export function RulesManager({
         </div>
         <Button size="sm" onClick={() => setNewOpen(true)}>
           <PlusIcon className="mr-1.5 size-3.5" />
-          Nova
+          Nova regra
         </Button>
       </CardHeader>
       <CardContent>

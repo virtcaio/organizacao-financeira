@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, exists, gte, ilike, inArray, lte, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   transactions,
@@ -13,6 +13,10 @@ import {
 import { requireUserId } from "@/lib/auth-helpers";
 import { transactionInputSchema, transferInputSchema } from "@/types/transaction";
 import { getTagsByTransactionIds } from "@/lib/db/queries/tags";
+import {
+  categoriesAreAccessible,
+  categoryIsAccessible,
+} from "@/lib/db/queries/categories";
 import type { Tag } from "@/types/tag";
 import { randomUUID } from "node:crypto";
 import { removeReceipt, isOwnReceiptKey } from "@/lib/storage";
@@ -26,22 +30,26 @@ async function syncTransactionTags(
   transactionId: string,
   tagIds: string[] | undefined,
 ) {
-  await db
-    .delete(transactionTags)
-    .where(eq(transactionTags.transactionId, transactionId));
+  let ownedIds: string[] = [];
+  if (tagIds && tagIds.length > 0) {
+    const owned = await db
+      .select({ id: tags.id })
+      .from(tags)
+      .where(and(eq(tags.userId, userId), inArray(tags.id, tagIds)));
+    ownedIds = owned.map((t) => t.id);
+  }
 
-  if (!tagIds || tagIds.length === 0) return;
-
-  const owned = await db
-    .select({ id: tags.id })
-    .from(tags)
-    .where(and(eq(tags.userId, userId), inArray(tags.id, tagIds)));
-  const ownedIds = owned.map((t) => t.id);
-  if (ownedIds.length === 0) return;
-
-  await db
-    .insert(transactionTags)
-    .values(ownedIds.map((tagId) => ({ transactionId, tagId })));
+  // Delete + insert na mesma transação: falha no meio não pode perder as tags.
+  await db.transaction(async (tx) => {
+    await tx
+      .delete(transactionTags)
+      .where(eq(transactionTags.transactionId, transactionId));
+    if (ownedIds.length > 0) {
+      await tx
+        .insert(transactionTags)
+        .values(ownedIds.map((tagId) => ({ transactionId, tagId })));
+    }
+  });
 }
 
 export type ActionResult<T = void> =
@@ -79,31 +87,107 @@ export type TransactionListItem = {
   tags: Tag[];
 };
 
-export async function listTransactionsAction(): Promise<TransactionListItem[]> {
+export type TransactionListFilters = {
+  from?: string; // YYYY-MM-DD inclusivo
+  to?: string; // YYYY-MM-DD inclusivo
+  accountId?: string;
+  /** Categorias já expandidas (mãe + filhas) — ver expandCategoryFilter. */
+  categoryIds?: string[];
+  q?: string;
+  tagId?: string;
+};
+
+export type TransactionListPage = {
+  rows: TransactionListItem[];
+  /** Linhas-par de transferências fora da página (pra montar o draft de edição). */
+  pairs: { id: string; accountId: string; amount: string }[];
+  /** Total de linhas com os filtros aplicados. */
+  totalFiltered: number;
+  /** Total de linhas do usuário sem filtro (distingue "sem transações" de "filtro vazio"). */
+  totalAll: number;
+};
+
+const LIKE_ESCAPE = /[%_\\]/g;
+
+export async function listTransactionsAction(opts?: {
+  filters?: TransactionListFilters;
+  page?: number;
+  pageSize?: number;
+}): Promise<TransactionListPage> {
   const userId = await requireUserId();
   const parentCategory = categories;
-  const rows = await db
-    .select({
-      id: transactions.id,
-      type: transactions.type,
-      amount: transactions.amount,
-      currency: transactions.currency,
-      date: transactions.date,
-      description: transactions.description,
-      notes: transactions.notes,
-      accountId: transactions.financialAccountId,
-      accountName: financialAccounts.name,
-      categoryId: transactions.categoryId,
-      categoryName: parentCategory.name,
-      categoryParentId: parentCategory.parentId,
-      transferPairId: transactions.transferPairId,
-      sourceRef: transactions.sourceRef,
-    })
-    .from(transactions)
-    .innerJoin(financialAccounts, eq(financialAccounts.id, transactions.financialAccountId))
-    .leftJoin(parentCategory, eq(parentCategory.id, transactions.categoryId))
-    .where(eq(transactions.userId, userId))
-    .orderBy(desc(transactions.date), desc(transactions.createdAt));
+  const f = opts?.filters ?? {};
+  const pageSize = Math.min(Math.max(opts?.pageSize ?? 50, 1), 200);
+  const page = Math.max(opts?.page ?? 1, 1);
+
+  // Filtros no WHERE — os índices tx_user_date/account/category já existem;
+  // filtrar em JS pós-fetch carregava a tabela inteira do usuário por visita.
+  const conds = [eq(transactions.userId, userId)];
+  if (f.from) conds.push(gte(transactions.date, f.from));
+  if (f.to) conds.push(lte(transactions.date, f.to));
+  if (f.accountId) conds.push(eq(transactions.financialAccountId, f.accountId));
+  if (f.categoryIds && f.categoryIds.length > 0) {
+    conds.push(inArray(transactions.categoryId, f.categoryIds));
+  }
+  if (f.q) {
+    const escaped = f.q.replace(LIKE_ESCAPE, (c) => `\\${c}`);
+    conds.push(ilike(transactions.description, `%${escaped}%`));
+  }
+  if (f.tagId) {
+    conds.push(
+      exists(
+        db
+          .select({ one: sql`1` })
+          .from(transactionTags)
+          .where(
+            and(
+              eq(transactionTags.transactionId, transactions.id),
+              eq(transactionTags.tagId, f.tagId),
+            ),
+          ),
+      ),
+    );
+  }
+  const where = and(...conds);
+
+  const [rows, [filteredCount], [allCount]] = await Promise.all([
+    db
+      .select({
+        id: transactions.id,
+        type: transactions.type,
+        amount: transactions.amount,
+        currency: transactions.currency,
+        date: transactions.date,
+        description: transactions.description,
+        notes: transactions.notes,
+        accountId: transactions.financialAccountId,
+        accountName: financialAccounts.name,
+        categoryId: transactions.categoryId,
+        categoryName: parentCategory.name,
+        categoryParentId: parentCategory.parentId,
+        transferPairId: transactions.transferPairId,
+        source: transactions.source,
+        sourceRef: transactions.sourceRef,
+      })
+      .from(transactions)
+      .innerJoin(
+        financialAccounts,
+        eq(financialAccounts.id, transactions.financialAccountId),
+      )
+      .leftJoin(parentCategory, eq(parentCategory.id, transactions.categoryId))
+      .where(where)
+      .orderBy(desc(transactions.date), desc(transactions.createdAt))
+      .limit(pageSize)
+      .offset((page - 1) * pageSize),
+    db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(transactions)
+      .where(where),
+    db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(transactions)
+      .where(eq(transactions.userId, userId)),
+  ]);
 
   // Resolve parent category name in JS to keep the SQL one join lighter.
   const parentIds = Array.from(
@@ -113,7 +197,7 @@ export async function listTransactionsAction(): Promise<TransactionListItem[]> {
     ? await db
         .select({ id: categories.id, name: categories.name })
         .from(categories)
-        .where(eq(categories.archived, false))
+        .where(inArray(categories.id, parentIds))
     : [];
   const parentNameById = new Map(parents.map((p) => [p.id, p.name]));
 
@@ -122,25 +206,54 @@ export async function listTransactionsAction(): Promise<TransactionListItem[]> {
     rows.map((r) => r.id),
   );
 
-  return rows.map((r) => ({
-    id: r.id,
-    type: r.type,
-    amount: r.amount,
-    currency: r.currency,
-    date: r.date,
-    description: r.description,
-    notes: r.notes,
-    accountId: r.accountId,
-    accountName: r.accountName,
-    categoryId: r.categoryId,
-    categoryName: r.categoryName,
-    categoryParentName: r.categoryParentId
-      ? parentNameById.get(r.categoryParentId) ?? null
-      : null,
-    transferPairId: r.transferPairId,
-    receiptKey: r.sourceRef,
-    tags: tagsByTx.get(r.id) ?? [],
-  }));
+  // Linhas-par de transferências que caíram fora da página — só o necessário
+  // pra buildTransferDraft (conta + valor da outra perna).
+  const idsInPage = new Set(rows.map((r) => r.id));
+  const missingPairIds = rows
+    .map((r) => r.transferPairId)
+    .filter((v): v is string => !!v && !idsInPage.has(v));
+  const pairs = missingPairIds.length
+    ? await db
+        .select({
+          id: transactions.id,
+          accountId: transactions.financialAccountId,
+          amount: transactions.amount,
+        })
+        .from(transactions)
+        .where(
+          and(
+            eq(transactions.userId, userId),
+            inArray(transactions.id, missingPairIds),
+          ),
+        )
+    : [];
+
+  return {
+    rows: rows.map((r) => ({
+      id: r.id,
+      type: r.type,
+      amount: r.amount,
+      currency: r.currency,
+      date: r.date,
+      description: r.description,
+      notes: r.notes,
+      accountId: r.accountId,
+      accountName: r.accountName,
+      categoryId: r.categoryId,
+      categoryName: r.categoryName,
+      categoryParentName: r.categoryParentId
+        ? parentNameById.get(r.categoryParentId) ?? null
+        : null,
+      transferPairId: r.transferPairId,
+      // sourceRef é dual-purpose: key de foto OU id externo (FITID/fingerprint).
+      // Só é comprovante quando a origem é foto.
+      receiptKey: r.source === "photo" ? r.sourceRef : null,
+      tags: tagsByTx.get(r.id) ?? [],
+    })),
+    pairs,
+    totalFiltered: filteredCount?.n ?? 0,
+    totalAll: allCount?.n ?? 0,
+  };
 }
 
 export async function createTransactionAction(
@@ -171,6 +284,10 @@ export async function createTransactionAction(
     .limit(1);
   if (!account) {
     return { ok: false, error: "Conta não encontrada" };
+  }
+
+  if (data.categoryId && !(await categoryIsAccessible(userId, data.categoryId))) {
+    return { ok: false, error: "Categoria não encontrada" };
   }
 
   // Comprovante anexado (vindo do OCR). Só aceita key do próprio usuário.
@@ -216,6 +333,25 @@ export async function updateTransactionAction(
 
   const data = parsed.data;
 
+  // Mesma defense-in-depth do create: conta e categoria precisam ser do usuário.
+  const [account] = await db
+    .select({ id: financialAccounts.id })
+    .from(financialAccounts)
+    .where(
+      and(
+        eq(financialAccounts.id, data.financialAccountId),
+        eq(financialAccounts.userId, userId),
+      ),
+    )
+    .limit(1);
+  if (!account) {
+    return { ok: false, error: "Conta não encontrada" };
+  }
+
+  if (data.categoryId && !(await categoryIsAccessible(userId, data.categoryId))) {
+    return { ok: false, error: "Categoria não encontrada" };
+  }
+
   const result = await db
     .update(transactions)
     .set({
@@ -245,12 +381,18 @@ export async function updateTransactionAction(
 export async function deleteTransactionAction(id: string): Promise<ActionResult> {
   const userId = await requireUserId();
 
-  // Lê o comprovante antes de apagar — pra remover o arquivo do Storage.
+  // Lê tipo e comprovante antes de apagar — pra recusar perna de transferência
+  // e remover o arquivo do Storage.
   const [existing] = await db
-    .select({ sourceRef: transactions.sourceRef })
+    .select({ type: transactions.type, sourceRef: transactions.sourceRef })
     .from(transactions)
     .where(and(eq(transactions.id, id), eq(transactions.userId, userId)))
     .limit(1);
+
+  // Perna de transferência não pode ser excluída sozinha (deixaria a outra órfã).
+  if (existing?.type === "transfer") {
+    return { ok: false, error: "Use as ações de transferência para excluir o par" };
+  }
 
   const result = await db
     .delete(transactions)
@@ -385,7 +527,7 @@ export async function updateTransferAction(
       const [current] = await tx
         .select({ amount: transactions.amount })
         .from(transactions)
-        .where(eq(transactions.id, id))
+        .where(and(eq(transactions.id, id), eq(transactions.userId, userId)))
         .limit(1);
       const isOutgoing = current ? Number(current.amount) < 0 : false;
       await tx
@@ -491,6 +633,14 @@ export async function createTransactionsBulkAction(
     }
   }
 
+  // Mesma checagem pra categorias (seed ou do próprio usuário).
+  const categoryIds = rows
+    .map((r) => r.categoryId)
+    .filter((v): v is string => !!v);
+  if (!(await categoriesAreAccessible(userId, categoryIds))) {
+    return { ok: false, error: "Categoria inválida no lote." };
+  }
+
   // Dedup: pra linhas com sourceRef, checa se já existe (userId, account,
   // source, sourceRef). Linhas sem sourceRef passam sempre.
   const refsToCheck = rows
@@ -523,37 +673,51 @@ export async function createTransactionsBulkAction(
     }
   }
 
+  // Dedup também dentro do próprio lote (dois FITIDs iguais no mesmo arquivo).
+  const seenInBatch = new Set<string>();
   const toInsert = rows.filter((r) => {
     if (!r.sourceRef) return true;
     const key = `${r.financialAccountId}|${r.source ?? "pdf"}|${r.sourceRef}`;
-    return !existingKeys.has(key);
+    if (existingKeys.has(key) || seenInBatch.has(key)) return false;
+    seenInBatch.add(key);
+    return true;
   });
-  const skipped = rows.length - toInsert.length;
 
+  let insertedCount = 0;
   if (toInsert.length > 0) {
-    await db.insert(transactions).values(
-      toInsert.map((r) => ({
-        userId,
-        financialAccountId: r.financialAccountId,
-        categoryId: r.categoryId ?? null,
-        type: r.type,
-        amount: r.amount,
-        currency: r.currency,
-        date: r.date,
-        description: r.description,
-        notes: r.notes ?? null,
-        source: r.source ?? "pdf",
-        sourceRef: r.sourceRef ?? null,
-        installmentSeq: r.installmentSeq ?? null,
-        installmentTotal: r.installmentTotal ?? null,
-        installmentGroupId: r.installmentGroupId ?? null,
-      })),
-    );
+    // onConflictDoNothing + índice único parcial (tx_user_source_ref_uq):
+    // o check acima é UX; a constraint segura requests concorrentes.
+    const inserted = await db
+      .insert(transactions)
+      .values(
+        toInsert.map((r) => ({
+          userId,
+          financialAccountId: r.financialAccountId,
+          categoryId: r.categoryId ?? null,
+          type: r.type,
+          amount: r.amount,
+          currency: r.currency,
+          date: r.date,
+          description: r.description,
+          notes: r.notes ?? null,
+          source: r.source ?? "pdf",
+          sourceRef: r.sourceRef ?? null,
+          installmentSeq: r.installmentSeq ?? null,
+          installmentTotal: r.installmentTotal ?? null,
+          installmentGroupId: r.installmentGroupId ?? null,
+        })),
+      )
+      .onConflictDoNothing()
+      .returning({ id: transactions.id });
+    insertedCount = inserted.length;
   }
 
   revalidatePath("/transacoes");
   revalidatePath("/dashboard");
-  return { ok: true, data: { inserted: toInsert.length, skipped } };
+  return {
+    ok: true,
+    data: { inserted: insertedCount, skipped: rows.length - insertedCount },
+  };
 }
 
 export async function listAccountsForPickerAction() {

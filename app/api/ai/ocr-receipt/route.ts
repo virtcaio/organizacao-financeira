@@ -1,17 +1,19 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import {
+  isLikelyAnthropicKey,
   buildAnthropicForRequest,
   DEFAULT_MODEL,
   sanitizeForLog,
 } from "@/lib/ai/server";
-import { buildOcrReceiptSystemPrompt } from "@/lib/ai/prompts/ocr-receipt";
+import { clientIpFromHeaders, rateLimit } from "@/lib/rate-limit";
+import { buildOcrReceiptSystemPrompt, PROMPT_VERSION } from "@/lib/ai/prompts/ocr-receipt";
 import { ocrReceiptOutputSchema, type OcrReceiptOutput } from "@/lib/ai/types";
 import { listRulesForApply } from "@/lib/db/queries/categorization-rules";
 import { findFirstMatchingRule } from "@/lib/categorization/apply";
 import { listCategoriesForUser } from "@/lib/db/queries/categories";
 import { uploadReceipt, signedReceiptUrl, ACCEPTED_IMAGE_TYPES } from "@/lib/storage";
-import { findAiRunCache, hashInput, saveAiRun } from "@/lib/ai/dedup";
+import { findAiRunCache, hashInputVersioned, saveAiRun } from "@/lib/ai/dedup";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,8 +43,19 @@ export async function POST(req: Request) {
   }
   const userId = session.user.id;
 
+  const rl = rateLimit(`ocr:${userId}:${clientIpFromHeaders(req.headers)}`, {
+    limit: 20,
+    windowMs: 5 * 60_000,
+  });
+  if (!rl.ok) {
+    return NextResponse.json(
+      { ok: false, error: "Muitas requisições. Tente novamente em instantes." },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfterSeconds) } },
+    );
+  }
+
   const apiKey = req.headers.get("x-anthropic-key")?.trim();
-  if (!apiKey || !apiKey.startsWith("sk-ant-")) {
+  if (!apiKey || !isLikelyAnthropicKey(apiKey)) {
     return NextResponse.json(
       { ok: false, error: "Chave Anthropic ausente. Configure em /configuracoes." },
       { status: 400 },
@@ -78,7 +91,10 @@ export async function POST(req: Request) {
 
   const arrayBuffer = await file.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
-  const inputHash = hashInput(buffer);
+  const inputHash = hashInputVersioned(
+    `ocr_receipt:v${PROMPT_VERSION}:${DEFAULT_MODEL}`,
+    buffer,
+  );
 
   // Sobe o comprovante no bucket privado (sempre — arquiva a foto).
   let receiptKey: string;

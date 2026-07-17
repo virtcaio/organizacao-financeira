@@ -71,3 +71,6 @@ export function buildCategorizeImportedSystemPrompt(
 
   return lines.join("\n");
 }
+
+/** Incrementar quando o system prompt mudar de forma relevante — invalida o cache de ai_run. */
+export const PROMPT_VERSION = 1;

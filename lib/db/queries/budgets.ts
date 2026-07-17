@@ -116,6 +116,35 @@ export async function getBudgetsForMonth(
   }
 
   const monthEnd = monthEndFromStart(monthIso);
+
+  // Uma query agregada pra TODAS as categorias envolvidas (orçadas + filhas),
+  // em vez de um SELECT sum() por categoria dentro do loop (era 5+K queries
+  // por page view; com o summary duplicado, o dobro disso).
+  const involvedIds = new Set<string>(categoryIds);
+  for (const kids of childrenByMother.values()) {
+    for (const k of kids) involvedIds.add(k);
+  }
+  const spentRows = await db
+    .select({
+      categoryId: transactions.categoryId,
+      total: sql<string>`coalesce(sum(${transactions.amount}), 0)`,
+    })
+    .from(transactions)
+    .where(
+      and(
+        eq(transactions.userId, userId),
+        eq(transactions.currency, "BRL"),
+        eq(transactions.type, "expense"),
+        inArray(transactions.categoryId, Array.from(involvedIds)),
+        sql`${transactions.date} >= ${monthIso}`,
+        sql`${transactions.date} <= ${monthEnd}`,
+      ),
+    )
+    .groupBy(transactions.categoryId);
+  const spentByCat = new Map(
+    spentRows.map((r) => [r.categoryId, Number(r.total)]),
+  );
+
   const items: BudgetRow[] = [];
 
   for (const categoryId of categoryIds) {
@@ -133,21 +162,10 @@ export async function getBudgetsForMonth(
       ? [categoryId, ...(childrenByMother.get(categoryId) ?? [])]
       : [categoryId];
 
-    const [spentRow] = await db
-      .select({ total: sql<string>`coalesce(sum(${transactions.amount}), 0)` })
-      .from(transactions)
-      .where(
-        and(
-          eq(transactions.userId, userId),
-          eq(transactions.currency, "BRL"),
-          eq(transactions.type, "expense"),
-          inArray(transactions.categoryId, includedCategoryIds),
-          sql`${transactions.date} >= ${monthIso}`,
-          sql`${transactions.date} <= ${monthEnd}`,
-        ),
-      );
-
-    const spent = Number(spentRow?.total ?? 0);
+    const spent = includedCategoryIds.reduce(
+      (acc, id) => acc + (spentByCat.get(id) ?? 0),
+      0,
+    );
     const remaining = limit - spent;
     const percent = limit === 0 ? 0 : (spent / limit) * 100;
 
@@ -177,16 +195,20 @@ export async function getBudgetsForMonth(
   return items;
 }
 
-export async function getMonthlyBudgetSummary(
-  userId: string,
-  monthIso: string,
-): Promise<BudgetSummary> {
-  const rows = await getBudgetsForMonth(userId, monthIso);
+/** Resumo agregado a partir de linhas já carregadas — puro, sem DB. */
+export function summarizeBudgets(rows: BudgetRow[]): BudgetSummary {
   const totalLimit = rows.reduce((acc, r) => acc + r.limit, 0);
   const totalSpent = rows.reduce((acc, r) => acc + r.spent, 0);
   const totalRemaining = totalLimit - totalSpent;
   const percent = totalLimit === 0 ? 0 : (totalSpent / totalLimit) * 100;
   return { totalLimit, totalSpent, totalRemaining, percent };
+}
+
+export async function getMonthlyBudgetSummary(
+  userId: string,
+  monthIso: string,
+): Promise<BudgetSummary> {
+  return summarizeBudgets(await getBudgetsForMonth(userId, monthIso));
 }
 
 /**

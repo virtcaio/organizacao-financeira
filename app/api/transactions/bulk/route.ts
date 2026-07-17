@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { isoDateString } from "@/types/iso-date";
+import { normalizeAmountInput } from "@/types/amount";
 import { auth } from "@/lib/auth";
+import { clientIpFromHeaders, rateLimit } from "@/lib/rate-limit";
 import { db } from "@/lib/db";
 import { financialAccounts, transactions } from "@/lib/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { incrementHitCounts } from "@/lib/db/queries/categorization-rules";
+import { categoriesAreAccessible } from "@/lib/db/queries/categories";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,11 +20,11 @@ const rowSchema = z.object({
   amount: z
     .string()
     .trim()
-    .transform((v) => v.replace(",", "."))
+    .transform(normalizeAmountInput)
     .refine((v) => /^\d+(\.\d{1,2})?$/.test(v), "Valor inválido")
     .refine((v) => Number(v) > 0, "Valor precisa ser maior que zero"),
   currency: z.enum(["BRL", "USD", "EUR"]),
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida"),
+  date: isoDateString,
   description: z.string().trim().min(1).max(200),
   notes: z.string().trim().max(1000).nullable().optional(),
   installmentSeq: z.number().int().positive().nullable().optional(),
@@ -42,6 +46,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "Não autenticado" }, { status: 401 });
   }
   const userId = session.user.id;
+
+  const rl = rateLimit(`bulk:${userId}:${clientIpFromHeaders(req.headers)}`, {
+    limit: 30,
+    windowMs: 5 * 60_000,
+  });
+  if (!rl.ok) {
+    return NextResponse.json(
+      { ok: false, error: "Muitas requisições. Tente novamente em instantes." },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfterSeconds) } },
+    );
+  }
 
   let body: unknown;
   try {
@@ -79,6 +94,17 @@ export async function POST(req: Request) {
     }
   }
 
+  // Mesma checagem pra categorias (seed ou do próprio usuário).
+  const categoryIds = rows
+    .map((r) => r.categoryId)
+    .filter((v): v is string => !!v);
+  if (!(await categoriesAreAccessible(userId, categoryIds))) {
+    return NextResponse.json(
+      { ok: false, error: "Categoria inválida no lote." },
+      { status: 400 },
+    );
+  }
+
   // Dedup: pra linhas com sourceRef, checa se já existe (userId, account,
   // source, sourceRef). Linhas sem sourceRef passam sempre.
   const refsOnly = rows
@@ -106,39 +132,55 @@ export async function POST(req: Request) {
     }
   }
 
+  // Dedup também dentro do próprio lote (dois FITIDs iguais no mesmo arquivo).
+  const seenInBatch = new Set<string>();
   const toInsert = rows.filter((r) => {
     if (!r.sourceRef) return true;
     const key = `${r.financialAccountId}|${r.source ?? "pdf"}|${r.sourceRef}`;
-    return !existingKeys.has(key);
+    if (existingKeys.has(key) || seenInBatch.has(key)) return false;
+    seenInBatch.add(key);
+    return true;
   });
-  const skipped = rows.length - toInsert.length;
 
   if (toInsert.length === 0) {
-    return NextResponse.json({ ok: true, inserted: 0, skipped });
+    return NextResponse.json({ ok: true, inserted: 0, skipped: rows.length });
   }
 
+  let insertedCount = 0;
   try {
-    await db.insert(transactions).values(
-      toInsert.map((r) => ({
-        userId,
-        financialAccountId: r.financialAccountId,
-        categoryId: r.categoryId ?? null,
-        type: r.type,
-        amount: r.amount,
-        currency: r.currency,
-        date: r.date,
-        description: r.description,
-        notes: r.notes ?? null,
-        source: r.source ?? "pdf",
-        sourceRef: r.sourceRef ?? null,
-        installmentSeq: r.installmentSeq ?? null,
-        installmentTotal: r.installmentTotal ?? null,
-      })),
+    // onConflictDoNothing + índice único parcial (tx_user_source_ref_uq):
+    // o check acima é UX; a constraint segura requests concorrentes.
+    const inserted = await db
+      .insert(transactions)
+      .values(
+        toInsert.map((r) => ({
+          userId,
+          financialAccountId: r.financialAccountId,
+          categoryId: r.categoryId ?? null,
+          type: r.type,
+          amount: r.amount,
+          currency: r.currency,
+          date: r.date,
+          description: r.description,
+          notes: r.notes ?? null,
+          source: r.source ?? "pdf",
+          sourceRef: r.sourceRef ?? null,
+          installmentSeq: r.installmentSeq ?? null,
+          installmentTotal: r.installmentTotal ?? null,
+        })),
+      )
+      .onConflictDoNothing()
+      .returning({ id: transactions.id });
+    insertedCount = inserted.length;
+  } catch {
+    // Mensagem genérica: erro cru do Postgres não deve vazar pro cliente.
+    return NextResponse.json(
+      { ok: false, error: "Falha ao salvar o lote. Tente novamente." },
+      { status: 500 },
     );
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Falha ao inserir";
-    return NextResponse.json({ ok: false, error: msg }, { status: 500 });
   }
+
+  const skipped = rows.length - insertedCount;
 
   // Increment hitCount das regras que foram aplicadas no save (best-effort, não bloqueia).
   const ruleIds = toInsert.map((r) => r.ruleId).filter((v): v is string => !!v);
@@ -150,5 +192,5 @@ export async function POST(req: Request) {
     }
   }
 
-  return NextResponse.json({ ok: true, inserted: toInsert.length, skipped });
+  return NextResponse.json({ ok: true, inserted: insertedCount, skipped });
 }

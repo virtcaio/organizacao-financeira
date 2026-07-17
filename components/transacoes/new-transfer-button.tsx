@@ -18,7 +18,7 @@ export function NewTransferButton({
     <>
       <Button variant={variant} onClick={() => setOpen(true)}>
         <ArrowLeftRightIcon className="mr-2 size-4" />
-        Transferência
+        Nova transferência
       </Button>
       <TransferFormDialog open={open} onOpenChange={setOpen} accounts={accounts} />
     </>

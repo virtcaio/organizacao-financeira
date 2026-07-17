@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { isoDateString } from "@/types/iso-date";
+import { normalizeAmountInput } from "@/types/amount";
 
 export const TRANSACTION_TYPES = ["income", "expense"] as const;
 export type TransactionType = (typeof TRANSACTION_TYPES)[number];
@@ -8,17 +10,14 @@ export const TRANSACTION_TYPE_LABELS: Record<TransactionType, string> = {
   expense: "Despesa",
 };
 
-const amountString = z
+export const amountString = z
   .string()
   .trim()
-  .transform((v) => v.replace(",", "."))
+  .transform(normalizeAmountInput)
   .refine((v) => /^\d+(\.\d{1,2})?$/.test(v), "Valor inválido")
   .refine((v) => Number(v) > 0, "Valor precisa ser maior que zero");
 
-const isoDate = z
-  .string()
-  .trim()
-  .refine((v) => /^\d{4}-\d{2}-\d{2}$/.test(v), "Data inválida");
+const isoDate = isoDateString;
 
 const uuid = z.string().uuid("Identificador inválido");
 const optionalUuid = z

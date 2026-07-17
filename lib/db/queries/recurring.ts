@@ -2,6 +2,7 @@ import "server-only";
 import { and, asc, eq, gte, lte, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { categories, financialAccounts, recurringRules } from "@/lib/db/schema";
+import { addDaysIso, todayIso } from "@/lib/date";
 import type { RecurringRuleListItem } from "@/types/recurring";
 
 function mapRow(r: {
@@ -78,11 +79,10 @@ export async function getUpcomingRules(
   userId: string,
   days = 14,
 ): Promise<RecurringRuleListItem[]> {
-  const today = new Date();
-  const todayIso = today.toISOString().slice(0, 10);
-  const limit = new Date(today);
-  limit.setUTCDate(limit.getUTCDate() + days);
-  const limitIso = limit.toISOString().slice(0, 10);
+  // todayIso() respeita APP_TIMEZONE — toISOString() direto usa "hoje" em UTC
+  // e faz recorrências do dia sumirem do widget entre 21h e 0h (BRT).
+  const start = todayIso();
+  const limitIso = addDaysIso(start, days);
 
   const rows = await db
     .select({
@@ -112,7 +112,7 @@ export async function getUpcomingRules(
       and(
         eq(recurringRules.userId, userId),
         eq(recurringRules.paused, false),
-        gte(recurringRules.nextRunAt, todayIso),
+        gte(recurringRules.nextRunAt, start),
         lte(recurringRules.nextRunAt, limitIso),
       ),
     )

@@ -16,13 +16,13 @@ export type AccountWithBalance = {
 };
 
 /**
- * Convenção de sinal (mesma do dashboard em `lib/db/queries/dashboard.ts`):
+ * Convenção de sinal canônica (reusada pelo dashboard em `lib/db/queries/dashboard.ts`):
  * - income / adjustment: amount já tem sinal (positivo soma, negativo subtrai)
  * - expense: amount armazenado positivo, subtrai do saldo
  * - transfer: amount já tem sinal (outflow negativo, inflow positivo)
  * - investment: ignorado no saldo de caixa
  */
-const signedSumExpr = sql<string>`coalesce(sum(
+export const signedSumExpr = sql<string>`coalesce(sum(
   case ${transactions.type}
     when 'expense' then -${transactions.amount}
     when 'investment' then 0

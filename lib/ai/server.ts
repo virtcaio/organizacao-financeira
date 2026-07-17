@@ -18,3 +18,13 @@ export function buildAnthropicForRequest(apiKey: string): Anthropic {
 export function sanitizeForLog(s: string): string {
   return s.replace(/sk-ant-[A-Za-z0-9_-]+/g, "sk-ant-***");
 }
+
+const ANTHROPIC_KEY_RE = /^sk-ant-[A-Za-z0-9_-]{16,}$/;
+
+/**
+ * Checagem de formato da chave BYOK antes de qualquer chamada. Não valida a
+ * chave de verdade (isso é o /api/ai/validate-key) — só corta lixo óbvio.
+ */
+export function isLikelyAnthropicKey(key: string): boolean {
+  return ANTHROPIC_KEY_RE.test(key);
+}

@@ -2,11 +2,13 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import {
+  isLikelyAnthropicKey,
   buildAnthropicForRequest,
   DEFAULT_MODEL,
   sanitizeForLog,
 } from "@/lib/ai/server";
-import { buildCategorizeImportedSystemPrompt } from "@/lib/ai/prompts/categorize-imported";
+import { clientIpFromHeaders, rateLimit } from "@/lib/rate-limit";
+import { buildCategorizeImportedSystemPrompt, PROMPT_VERSION } from "@/lib/ai/prompts/categorize-imported";
 import { categorizeImportedOutputSchema } from "@/lib/ai/types";
 import { listCategoriesForUser } from "@/lib/db/queries/categories";
 import { listRulesForApply } from "@/lib/db/queries/categorization-rules";
@@ -14,7 +16,7 @@ import { applyRulesToItems } from "@/lib/categorization/apply";
 import {
   canonicalJson,
   findAiRunCache,
-  hashInput,
+  hashInputVersioned,
   saveAiRun,
 } from "@/lib/ai/dedup";
 
@@ -58,8 +60,19 @@ export async function POST(req: Request) {
   }
   const userId = session.user.id;
 
+  const rl = rateLimit(`categorize:${userId}:${clientIpFromHeaders(req.headers)}`, {
+    limit: 20,
+    windowMs: 5 * 60_000,
+  });
+  if (!rl.ok) {
+    return NextResponse.json(
+      { ok: false, error: "Muitas requisições. Tente novamente em instantes." },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfterSeconds) } },
+    );
+  }
+
   const apiKey = req.headers.get("x-anthropic-key")?.trim();
-  if (!apiKey || !apiKey.startsWith("sk-ant-")) {
+  if (!apiKey || !isLikelyAnthropicKey(apiKey)) {
     return NextResponse.json(
       { ok: false, error: "Chave Anthropic ausente. Configure em /configuracoes." },
       { status: 400 },
@@ -130,7 +143,10 @@ export async function POST(req: Request) {
       type: u.type,
     }))
     .sort((a, b) => a.id.localeCompare(b.id));
-  const inputHash = hashInput(canonicalJson(cacheKeyItems));
+  const inputHash = hashInputVersioned(
+    `categorize_csv:v${PROMPT_VERSION}:${DEFAULT_MODEL}`,
+    canonicalJson(cacheKeyItems),
+  );
 
   const cached = await findAiRunCache(userId, "categorize_csv", inputHash);
   if (cached) {
@@ -280,10 +296,13 @@ function mergeSuggestions(
       };
     }
     const a = aiById.get(item.id);
+    // IA/cache podem devolver id fora do catálogo atual (ex.: categoria já
+    // excluída) — vira "Sem categoria" em vez de estourar a FK no save.
+    const valid = !!a?.category_id && catLabelById.has(a.category_id);
     return {
       id: item.id,
-      category_id: a?.category_id ?? null,
-      category_name: a?.category_name ?? null,
+      category_id: valid ? a!.category_id : null,
+      category_name: valid ? catLabelById.get(a!.category_id!) ?? null : null,
       rule_id: null,
     };
   });

@@ -1,37 +1,28 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { clientIpFromHeaders, rateLimit } from "@/lib/rate-limit";
 import { parseOfx } from "@/lib/ofx/parse";
+import { detectEncoding } from "@/lib/ofx/encoding";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const MAX_OFX_SIZE_BYTES = 5 * 1024 * 1024; // 5MB cobre extratos longos
 
-function detectEncoding(headerBytes: Buffer): string {
-  // OFX 1.x carrega cabeçalho `CHARSET:1252` (ou similar) antes do corpo.
-  // OFX 2.x é XML com <?xml encoding="..."?>.
-  const head = headerBytes.toString("ascii");
-  const charsetMatch = head.match(/CHARSET[:=]\s*([0-9A-Za-z-]+)/i);
-  if (charsetMatch) {
-    const c = charsetMatch[1].toLowerCase();
-    if (c.includes("1252") || c.includes("latin") || c === "iso-8859-1") {
-      return "windows-1252";
-    }
-  }
-  const xmlEnc = head.match(/<\?xml[^>]*encoding=["']([^"']+)/i);
-  if (xmlEnc) {
-    const c = xmlEnc[1].toLowerCase();
-    if (c.includes("1252") || c.includes("latin") || c === "iso-8859-1") {
-      return "windows-1252";
-    }
-  }
-  return "utf-8";
-}
-
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ ok: false, error: "Não autenticado" }, { status: 401 });
+  }
+  const rl = rateLimit(`ofx:${session.user.id}:${clientIpFromHeaders(req.headers)}`, {
+    limit: 20,
+    windowMs: 5 * 60_000,
+  });
+  if (!rl.ok) {
+    return NextResponse.json(
+      { ok: false, error: "Muitas requisições. Tente novamente em instantes." },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfterSeconds) } },
+    );
   }
 
   let formData: FormData;

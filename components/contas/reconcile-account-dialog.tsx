@@ -18,6 +18,7 @@ import { Label } from "@/components/ui/label";
 import { reconcileAccountAction } from "@/lib/actions/financial-accounts";
 import { LOADING_TEXT } from "@/lib/ui-text";
 import { todayIso } from "@/lib/date";
+import { normalizeAmountInput } from "@/types/amount";
 import { formatCurrency } from "@/lib/format";
 
 type Props = {
@@ -42,7 +43,7 @@ export function ReconcileAccountDialog({ open, onOpenChange, account }: Props) {
 
   const currentBalance = Number(account.computedBalance);
   const realNumeric = useMemo(() => {
-    const normalized = realBalance.trim().replace(",", ".");
+    const normalized = normalizeAmountInput(realBalance);
     if (!normalized || !AMOUNT_RE.test(normalized)) return null;
     return Number(normalized);
   }, [realBalance]);
@@ -61,7 +62,7 @@ export function ReconcileAccountDialog({ open, onOpenChange, account }: Props) {
     startTransition(async () => {
       const res = await reconcileAccountAction({
         accountId: account.id,
-        realBalance: realBalance.trim().replace(",", "."),
+        realBalance: normalizeAmountInput(realBalance),
         date,
       });
       if (!res.ok) {

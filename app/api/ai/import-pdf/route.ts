@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import {
+  isLikelyAnthropicKey,
   buildAnthropicForRequest,
   DEFAULT_MODEL,
   sanitizeForLog,
 } from "@/lib/ai/server";
-import { buildImportPdfSystemPrompt } from "@/lib/ai/prompts/import-pdf";
+import { clientIpFromHeaders, rateLimit } from "@/lib/rate-limit";
+import { buildImportPdfSystemPrompt, PROMPT_VERSION } from "@/lib/ai/prompts/import-pdf";
 import {
   importPdfOutputSchema,
   type ImportPdfOutput,
@@ -16,7 +18,7 @@ import {
   findFirstMatchingRule,
   type CategorizationRule,
 } from "@/lib/categorization/apply";
-import { findAiRunCache, hashInput, saveAiRun } from "@/lib/ai/dedup";
+import { findAiRunCache, hashInputVersioned, saveAiRun } from "@/lib/ai/dedup";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -46,8 +48,19 @@ export async function POST(req: Request) {
   }
   const userId = session.user.id;
 
+  const rl = rateLimit(`import-pdf:${userId}:${clientIpFromHeaders(req.headers)}`, {
+    limit: 10,
+    windowMs: 5 * 60_000,
+  });
+  if (!rl.ok) {
+    return NextResponse.json(
+      { ok: false, error: "Muitas requisições. Tente novamente em instantes." },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfterSeconds) } },
+    );
+  }
+
   const apiKey = req.headers.get("x-anthropic-key")?.trim();
-  if (!apiKey || !apiKey.startsWith("sk-ant-")) {
+  if (!apiKey || !isLikelyAnthropicKey(apiKey)) {
     return NextResponse.json(
       { ok: false, error: "Chave Anthropic ausente. Configure em /configuracoes." },
       { status: 400 },
@@ -81,7 +94,20 @@ export async function POST(req: Request) {
   // PDF → buffer (pra hash de dedup) + base64 (pro envio à IA)
   const arrayBuffer = await file.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
-  const inputHash = hashInput(buffer);
+  const inputHash = hashInputVersioned(
+    `categorize_pdf:v${PROMPT_VERSION}:${DEFAULT_MODEL}`,
+    buffer,
+  );
+
+  // Catálogo atual do usuário — usado no prompt e pra validar os
+  // category_id devolvidos pela IA (ou pelo cache, que pode apontar pra
+  // categoria já excluída — sem isso o save do lote explode na FK).
+  const categories = await listCategoriesForUser(userId);
+  const validCategoryIds = new Set<string>();
+  for (const c of categories) {
+    validCategoryIds.add(c.id);
+    for (const ch of c.children) validCategoryIds.add(ch.id);
+  }
 
   // Dedup: mesmo PDF já processado antes? Reaproveita output, aplica regras atuais.
   const cached = await findAiRunCache(userId, "categorize_pdf", inputHash);
@@ -91,7 +117,7 @@ export async function POST(req: Request) {
       const rules = await listRulesForApply(userId);
       return NextResponse.json({
         ok: true,
-        data: applyRulesPostIA(reparsed.data, rules),
+        data: applyRulesPostIA(reparsed.data, rules, validCategoryIds),
         tokensIn: 0,
         tokensOut: 0,
         cacheReads: 0,
@@ -103,8 +129,6 @@ export async function POST(req: Request) {
 
   const base64 = buffer.toString("base64");
 
-  // System prompt with the user's category catalog
-  const categories = await listCategoriesForUser(userId);
   const system = buildImportPdfSystemPrompt(categories);
 
   const client = buildAnthropicForRequest(apiKey);
@@ -194,7 +218,7 @@ export async function POST(req: Request) {
 
   // Override pós-IA: regras locais sobrescrevem sugestões da IA quando casam.
   const rules = await listRulesForApply(userId);
-  const overridden = applyRulesPostIA(result.data, rules);
+  const overridden = applyRulesPostIA(result.data, rules, validCategoryIds);
 
   return NextResponse.json({
     ok: true,
@@ -210,14 +234,19 @@ export async function POST(req: Request) {
 function applyRulesPostIA(
   data: ImportPdfOutput,
   rules: CategorizationRule[],
+  validCategoryIds: Set<string>,
 ): ImportPdfOutput {
   return {
     ...data,
     transactions: data.transactions.map((tx) => {
       const match = findFirstMatchingRule(tx.description, rules);
-      return match
-        ? { ...tx, category_id: match.categoryId, rule_id: match.id }
-        : { ...tx, rule_id: null };
+      if (match) {
+        return { ...tx, category_id: match.categoryId, rule_id: match.id };
+      }
+      // IA/cache podem devolver id que não existe (mais) no catálogo — vira
+      // "Sem categoria" em vez de estourar a FK no save.
+      const valid = tx.category_id !== null && validCategoryIds.has(tx.category_id);
+      return { ...tx, category_id: valid ? tx.category_id : null, rule_id: null };
     }),
   };
 }

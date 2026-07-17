@@ -52,16 +52,21 @@ export function applyRulesToItems<T extends Categorizable>(
   items: T[],
   rules: CategorizationRule[],
 ): ApplyResult<T> {
-  const sorted = sortRules(rules);
+  // Pré-computa o lowercase dos patterns uma vez — dentro do loop era
+  // O(items × rules) toLowerCase repetidos.
+  const sorted = sortRules(rules).map((r) => ({
+    rule: r,
+    patternLower: r.pattern.toLowerCase(),
+  }));
   const matched: RuleMatchedItem<T>[] = [];
   const unmatched: T[] = [];
 
   for (const item of items) {
     const desc = item.description.toLowerCase();
     let hit: CategorizationRule | null = null;
-    for (const r of sorted) {
-      if (desc.includes(r.pattern.toLowerCase())) {
-        hit = r;
+    for (const { rule, patternLower } of sorted) {
+      if (desc.includes(patternLower)) {
+        hit = rule;
         break;
       }
     }

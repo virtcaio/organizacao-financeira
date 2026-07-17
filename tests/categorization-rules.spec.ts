@@ -31,7 +31,7 @@ test("CRUD de regras de categorização em /configuracoes", async ({ page }) => 
     .locator('[data-slot="card-title"]:has-text("Regras de categorização")')
     .locator("..")
     .locator("..")
-    .getByRole("button", { name: /^Nova$/i })
+    .getByRole("button", { name: /^Nova regra$/i })
     .click();
   await expect(page.getByRole("heading", { name: "Nova regra" })).toBeVisible();
   await page.getByLabel("Padrão").fill("uber");

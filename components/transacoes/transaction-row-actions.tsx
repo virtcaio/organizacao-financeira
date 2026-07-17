@@ -37,11 +37,14 @@ export function TransactionRowActions({
   accounts,
   categories,
   tags,
+  editable = true,
 }: {
   transaction: TransactionDraft;
   accounts: AccountOption[];
   categories: CategoryNode[];
   tags: Tag[];
+  /** false pra tipos que o form não suporta (adjustment/investment) — só excluir. */
+  editable?: boolean;
 }) {
   const router = useRouter();
   const [editOpen, setEditOpen] = useState(false);
@@ -74,8 +77,14 @@ export function TransactionRowActions({
             }
           />
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => setEditOpen(true)}>Editar</DropdownMenuItem>
-            <DropdownMenuSeparator />
+            {editable ? (
+              <>
+                <DropdownMenuItem onClick={() => setEditOpen(true)}>
+                  Editar
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+              </>
+            ) : null}
             <DropdownMenuItem
               onClick={() => setDeleteOpen(true)}
               className="text-destructive focus:text-destructive"
@@ -86,14 +95,16 @@ export function TransactionRowActions({
         </DropdownMenu>
       </div>
 
-      <TransactionFormDialog
-        open={editOpen}
-        onOpenChange={setEditOpen}
-        accounts={accounts}
-        categories={categories}
-        tags={tags}
-        transaction={transaction}
-      />
+      {editable ? (
+        <TransactionFormDialog
+          open={editOpen}
+          onOpenChange={setEditOpen}
+          accounts={accounts}
+          categories={categories}
+          tags={tags}
+          transaction={transaction}
+        />
+      ) : null}
 
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <AlertDialogContent>
@@ -106,6 +117,7 @@ export function TransactionRowActions({
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isPending}>Cancelar</AlertDialogCancel>
             <AlertDialogAction
+              variant="destructive"
               onClick={(e) => {
                 e.preventDefault();
                 onConfirmDelete();

@@ -54,7 +54,20 @@ export function CategoryRowActions({ category, parentName, allCategories }: Prop
         toast.error(res.error);
         return;
       }
-      toast.success("Categoria arquivada");
+      toast.message("Categoria arquivada", {
+        action: {
+          label: "Desfazer",
+          onClick: async () => {
+            const undo = await unarchiveCategoryAction(category.id);
+            if (undo.ok) {
+              toast.success("Categoria restaurada");
+              router.refresh();
+            } else {
+              toast.error(undo.error);
+            }
+          },
+        },
+      });
       router.refresh();
     });
   }
@@ -161,7 +174,7 @@ export function CategoryRowActions({ category, parentName, allCategories }: Prop
             <AlertDialogAction
               onClick={handleDelete}
               disabled={isPending}
-              className="bg-destructive text-white hover:bg-destructive/90"
+              variant="destructive"
             >
               {isPending ? LOADING_TEXT.delete : "Excluir"}
             </AlertDialogAction>
