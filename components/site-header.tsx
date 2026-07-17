@@ -18,7 +18,7 @@ const TITLE_BY_PATH: Record<string, string> = {
   "/configuracoes": "Configurações",
 };
 
-export function SiteHeader() {
+export function SiteHeader({ actions }: { actions?: React.ReactNode }) {
   const pathname = usePathname();
   const matched = Object.keys(TITLE_BY_PATH)
     .filter((p) => pathname === p || pathname.startsWith(`${p}/`))
@@ -34,6 +34,7 @@ export function SiteHeader() {
           className="mx-2 h-4 data-vertical:self-auto"
         />
         <h1 className="text-base font-medium">{title}</h1>
+        {actions ? <div className="ml-auto flex items-center gap-1">{actions}</div> : null}
       </div>
     </header>
   );

@@ -5,9 +5,13 @@ import { budgets, budgetTemplates, categories, transactions } from "@/lib/db/sch
 import { monthEndFromStart } from "@/lib/date";
 import type { BudgetRow, BudgetScope, BudgetSummary } from "@/types/budget";
 
-function statusFor(percent: number): BudgetRow["status"] {
-  if (percent >= 100) return "exceeded";
-  if (percent >= 70) return "warning";
+/** Thresholds alinhados ao roadmap (80% atenção / 100% estourado). */
+export const BUDGET_WARNING_THRESHOLD = 80;
+export const BUDGET_EXCEEDED_THRESHOLD = 100;
+
+export function statusFor(percent: number): BudgetRow["status"] {
+  if (percent >= BUDGET_EXCEEDED_THRESHOLD) return "exceeded";
+  if (percent >= BUDGET_WARNING_THRESHOLD) return "warning";
   return "ok";
 }
 

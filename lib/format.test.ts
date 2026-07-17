@@ -3,7 +3,7 @@ import { amountDisplay, formatCurrency, formatDate } from "@/lib/format";
 
 /** Intl usa NBSP/narrow-NBSP entre "R$" e o número — normaliza pra comparar. */
 function norm(s: string): string {
-  return s.replace(/ | /g, " ");
+  return s.replace(/[\ \ ]/g, " ");
 }
 
 describe("formatCurrency", () => {
