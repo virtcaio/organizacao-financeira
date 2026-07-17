@@ -150,35 +150,53 @@ export function ImportPdfFlow({
     if (rows.length === 0) return;
     startSaving(async () => {
       try {
+        // Fingerprint por linha (data|valor|descrição + nº da ocorrência):
+        // reimportar a mesma fatura não duplica, e compras idênticas legítimas
+        // dentro da mesma fatura continuam distintas.
+        const occurrences = new Map<string, number>();
         const res = await fetch("/api/transactions/bulk", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            rows: rows.map((r) => ({
-              type: "expense",
-              financialAccountId: accountId,
-              categoryId: r.categoryId,
-              amount: r.amount.replace(",", "."),
-              currency: accountCurrency as "BRL" | "USD" | "EUR",
-              date: r.date,
-              description: r.description,
-              installmentSeq: r.installmentSeq,
-              installmentTotal: r.installmentTotal,
-              ruleId: r.ruleId,
-              source: "pdf",
-            })),
+            rows: rows.map((r) => {
+              const amount = r.amount.replace(",", ".");
+              const base = `${r.date}|${amount}|${r.description.trim().toLowerCase().slice(0, 60)}`;
+              const n = (occurrences.get(base) ?? 0) + 1;
+              occurrences.set(base, n);
+              return {
+                type: "expense",
+                financialAccountId: accountId,
+                categoryId: r.categoryId,
+                amount,
+                currency: accountCurrency as "BRL" | "USD" | "EUR",
+                date: r.date,
+                description: r.description,
+                installmentSeq: r.installmentSeq,
+                installmentTotal: r.installmentTotal,
+                ruleId: r.ruleId,
+                source: "pdf",
+                sourceRef: n > 1 ? `pdf:${base}#${n}` : `pdf:${base}`,
+              };
+            }),
           }),
         });
         const body = (await res.json()) as {
           ok: boolean;
           inserted?: number;
+          skipped?: number;
           error?: string;
         };
         if (!res.ok || !body.ok) {
           toast.error(body.error ?? `Erro HTTP ${res.status}`);
           return;
         }
-        toast.success(`${body.inserted} transações importadas.`);
+        if (body.skipped && body.skipped > 0) {
+          toast.success(
+            `${body.inserted} transações importadas · ${body.skipped} já existiam (ignoradas)`,
+          );
+        } else {
+          toast.success(`${body.inserted} transações importadas.`);
+        }
         reset();
         router.push("/transacoes");
         router.refresh();

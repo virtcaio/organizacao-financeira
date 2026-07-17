@@ -105,6 +105,7 @@ export async function listTransactionsAction(): Promise<TransactionListItem[]> {
       categoryName: parentCategory.name,
       categoryParentId: parentCategory.parentId,
       transferPairId: transactions.transferPairId,
+      source: transactions.source,
       sourceRef: transactions.sourceRef,
     })
     .from(transactions)
@@ -146,7 +147,9 @@ export async function listTransactionsAction(): Promise<TransactionListItem[]> {
       ? parentNameById.get(r.categoryParentId) ?? null
       : null,
     transferPairId: r.transferPairId,
-    receiptKey: r.sourceRef,
+    // sourceRef é dual-purpose: key de foto OU id externo (FITID/fingerprint).
+    // Só é comprovante quando a origem é foto.
+    receiptKey: r.source === "photo" ? r.sourceRef : null,
     tags: tagsByTx.get(r.id) ?? [],
   }));
 }
@@ -568,37 +571,51 @@ export async function createTransactionsBulkAction(
     }
   }
 
+  // Dedup também dentro do próprio lote (dois FITIDs iguais no mesmo arquivo).
+  const seenInBatch = new Set<string>();
   const toInsert = rows.filter((r) => {
     if (!r.sourceRef) return true;
     const key = `${r.financialAccountId}|${r.source ?? "pdf"}|${r.sourceRef}`;
-    return !existingKeys.has(key);
+    if (existingKeys.has(key) || seenInBatch.has(key)) return false;
+    seenInBatch.add(key);
+    return true;
   });
-  const skipped = rows.length - toInsert.length;
 
+  let insertedCount = 0;
   if (toInsert.length > 0) {
-    await db.insert(transactions).values(
-      toInsert.map((r) => ({
-        userId,
-        financialAccountId: r.financialAccountId,
-        categoryId: r.categoryId ?? null,
-        type: r.type,
-        amount: r.amount,
-        currency: r.currency,
-        date: r.date,
-        description: r.description,
-        notes: r.notes ?? null,
-        source: r.source ?? "pdf",
-        sourceRef: r.sourceRef ?? null,
-        installmentSeq: r.installmentSeq ?? null,
-        installmentTotal: r.installmentTotal ?? null,
-        installmentGroupId: r.installmentGroupId ?? null,
-      })),
-    );
+    // onConflictDoNothing + índice único parcial (tx_user_source_ref_uq):
+    // o check acima é UX; a constraint segura requests concorrentes.
+    const inserted = await db
+      .insert(transactions)
+      .values(
+        toInsert.map((r) => ({
+          userId,
+          financialAccountId: r.financialAccountId,
+          categoryId: r.categoryId ?? null,
+          type: r.type,
+          amount: r.amount,
+          currency: r.currency,
+          date: r.date,
+          description: r.description,
+          notes: r.notes ?? null,
+          source: r.source ?? "pdf",
+          sourceRef: r.sourceRef ?? null,
+          installmentSeq: r.installmentSeq ?? null,
+          installmentTotal: r.installmentTotal ?? null,
+          installmentGroupId: r.installmentGroupId ?? null,
+        })),
+      )
+      .onConflictDoNothing()
+      .returning({ id: transactions.id });
+    insertedCount = inserted.length;
   }
 
   revalidatePath("/transacoes");
   revalidatePath("/dashboard");
-  return { ok: true, data: { inserted: toInsert.length, skipped } };
+  return {
+    ok: true,
+    data: { inserted: insertedCount, skipped: rows.length - insertedCount },
+  };
 }
 
 export async function listAccountsForPickerAction() {

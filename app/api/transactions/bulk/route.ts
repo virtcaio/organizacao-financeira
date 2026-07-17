@@ -118,39 +118,55 @@ export async function POST(req: Request) {
     }
   }
 
+  // Dedup também dentro do próprio lote (dois FITIDs iguais no mesmo arquivo).
+  const seenInBatch = new Set<string>();
   const toInsert = rows.filter((r) => {
     if (!r.sourceRef) return true;
     const key = `${r.financialAccountId}|${r.source ?? "pdf"}|${r.sourceRef}`;
-    return !existingKeys.has(key);
+    if (existingKeys.has(key) || seenInBatch.has(key)) return false;
+    seenInBatch.add(key);
+    return true;
   });
-  const skipped = rows.length - toInsert.length;
 
   if (toInsert.length === 0) {
-    return NextResponse.json({ ok: true, inserted: 0, skipped });
+    return NextResponse.json({ ok: true, inserted: 0, skipped: rows.length });
   }
 
+  let insertedCount = 0;
   try {
-    await db.insert(transactions).values(
-      toInsert.map((r) => ({
-        userId,
-        financialAccountId: r.financialAccountId,
-        categoryId: r.categoryId ?? null,
-        type: r.type,
-        amount: r.amount,
-        currency: r.currency,
-        date: r.date,
-        description: r.description,
-        notes: r.notes ?? null,
-        source: r.source ?? "pdf",
-        sourceRef: r.sourceRef ?? null,
-        installmentSeq: r.installmentSeq ?? null,
-        installmentTotal: r.installmentTotal ?? null,
-      })),
+    // onConflictDoNothing + índice único parcial (tx_user_source_ref_uq):
+    // o check acima é UX; a constraint segura requests concorrentes.
+    const inserted = await db
+      .insert(transactions)
+      .values(
+        toInsert.map((r) => ({
+          userId,
+          financialAccountId: r.financialAccountId,
+          categoryId: r.categoryId ?? null,
+          type: r.type,
+          amount: r.amount,
+          currency: r.currency,
+          date: r.date,
+          description: r.description,
+          notes: r.notes ?? null,
+          source: r.source ?? "pdf",
+          sourceRef: r.sourceRef ?? null,
+          installmentSeq: r.installmentSeq ?? null,
+          installmentTotal: r.installmentTotal ?? null,
+        })),
+      )
+      .onConflictDoNothing()
+      .returning({ id: transactions.id });
+    insertedCount = inserted.length;
+  } catch {
+    // Mensagem genérica: erro cru do Postgres não deve vazar pro cliente.
+    return NextResponse.json(
+      { ok: false, error: "Falha ao salvar o lote. Tente novamente." },
+      { status: 500 },
     );
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Falha ao inserir";
-    return NextResponse.json({ ok: false, error: msg }, { status: 500 });
   }
+
+  const skipped = rows.length - insertedCount;
 
   // Increment hitCount das regras que foram aplicadas no save (best-effort, não bloqueia).
   const ruleIds = toInsert.map((r) => r.ruleId).filter((v): v is string => !!v);
@@ -162,5 +178,5 @@ export async function POST(req: Request) {
     }
   }
 
-  return NextResponse.json({ ok: true, inserted: toInsert.length, skipped });
+  return NextResponse.json({ ok: true, inserted: insertedCount, skipped });
 }

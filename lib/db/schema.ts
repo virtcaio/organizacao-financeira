@@ -15,6 +15,7 @@ import {
   char,
   varchar,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import type { AdapterAccount } from "next-auth/adapters";
 
 // =============================================================================
@@ -240,6 +241,11 @@ export const transactions = pgTable(
     index("tx_user_account_idx").on(t.userId, t.financialAccountId),
     index("tx_user_category_idx").on(t.userId, t.categoryId),
     index("tx_installment_group_idx").on(t.installmentGroupId),
+    // Dedup atômico de importação: o check-then-insert do bulk não segura
+    // requests concorrentes — a constraint é a barreira final.
+    uniqueIndex("tx_user_source_ref_uq")
+      .on(t.userId, t.financialAccountId, t.source, t.sourceRef)
+      .where(sql`${t.sourceRef} is not null`),
   ],
 );
 
