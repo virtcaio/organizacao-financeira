@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { isoDateString } from "@/types/iso-date";
+import { normalizeAmountInput } from "@/types/amount";
 import { auth } from "@/lib/auth";
 import { clientIpFromHeaders, rateLimit } from "@/lib/rate-limit";
 import { db } from "@/lib/db";
@@ -19,7 +20,7 @@ const rowSchema = z.object({
   amount: z
     .string()
     .trim()
-    .transform((v) => v.replace(",", "."))
+    .transform(normalizeAmountInput)
     .refine((v) => /^\d+(\.\d{1,2})?$/.test(v), "Valor inválido")
     .refine((v) => Number(v) > 0, "Valor precisa ser maior que zero"),
   currency: z.enum(["BRL", "USD", "EUR"]),

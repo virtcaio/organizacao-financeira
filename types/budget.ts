@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { normalizeAmountInput } from "@/types/amount";
 
 const uuid = z.string().uuid("Categoria inválida");
 
@@ -10,7 +11,7 @@ const monthIso = z
 const limitAmount = z
   .string()
   .trim()
-  .transform((v) => v.replace(",", "."))
+  .transform(normalizeAmountInput)
   .refine((v) => /^\d+(\.\d{1,2})?$/.test(v), "Valor inválido")
   .refine((v) => Number(v) > 0, "Valor precisa ser maior que zero");
 

@@ -32,6 +32,7 @@ import type { AccountOption } from "@/components/transacoes/transaction-form-dia
 import type { CategoryNode } from "@/lib/db/queries/categories";
 import type { ImportPdfOutput } from "@/lib/ai/types";
 import { formatCurrency } from "@/lib/format";
+import { normalizeAmountInput } from "@/types/amount";
 
 type Step = "upload" | "processing" | "review";
 
@@ -60,7 +61,7 @@ export function ImportPdfFlow({
   );
 
   const totalAmount = useMemo(
-    () => rows.reduce((acc, r) => acc + (Number(r.amount.replace(",", ".")) || 0), 0),
+    () => rows.reduce((acc, r) => acc + (Number(normalizeAmountInput(r.amount)) || 0), 0),
     [rows],
   );
 
@@ -159,7 +160,7 @@ export function ImportPdfFlow({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             rows: rows.map((r) => {
-              const amount = r.amount.replace(",", ".");
+              const amount = normalizeAmountInput(r.amount);
               const base = `${r.date}|${amount}|${r.description.trim().toLowerCase().slice(0, 60)}`;
               const n = (occurrences.get(base) ?? 0) + 1;
               occurrences.set(base, n);
