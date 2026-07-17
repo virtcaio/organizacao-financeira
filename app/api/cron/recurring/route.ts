@@ -66,13 +66,24 @@ async function handler(req: NextRequest) {
     }
 
     if (rows.length > 0) {
-      await db.transaction(async (tx) => {
-        await tx.insert(transactions).values(rows);
-        await tx
+      // Guard otimista: o UPDATE só passa se nextRunAt ainda é o valor lido.
+      // Duas execuções concorrentes (cron + retry/POST manual) leriam o mesmo
+      // nextRunAt e inseririam as mesmas ocorrências — só uma ganha o claim.
+      const claimed = await db.transaction(async (tx) => {
+        const res = await tx
           .update(recurringRules)
           .set({ nextRunAt: runAt })
-          .where(eq(recurringRules.id, rule.id));
+          .where(
+            and(
+              eq(recurringRules.id, rule.id),
+              eq(recurringRules.nextRunAt, rule.nextRunAt),
+            ),
+          );
+        if (res.count === 0) return false;
+        await tx.insert(transactions).values(rows);
+        return true;
       });
+      if (!claimed) continue; // outra execução processou esta regra
       generated += rows.length;
     }
 

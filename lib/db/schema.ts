@@ -302,7 +302,14 @@ export const recurringRules = pgTable(
     paused: boolean("paused").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("recurring_user_next_idx").on(t.userId, t.nextRunAt)],
+  (t) => [
+    index("recurring_user_next_idx").on(t.userId, t.nextRunAt),
+    // O cron busca `paused = false AND next_run_at <= hoje` sem userId —
+    // sem este índice parcial é seq scan da tabela inteira a cada execução.
+    index("recurring_due_idx")
+      .on(t.nextRunAt)
+      .where(sql`${t.paused} = false`),
+  ],
 );
 
 export const categorizationRules = pgTable(

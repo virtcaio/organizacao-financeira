@@ -1,0 +1,1 @@
+CREATE INDEX "recurring_due_idx" ON "recurring_rule" USING btree ("next_run_at") WHERE "recurring_rule"."paused" = false;
