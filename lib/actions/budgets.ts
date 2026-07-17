@@ -71,59 +71,29 @@ export async function upsertBudgetAction(
     };
   }
 
+  // Upsert atômico via UNIQUE constraint — o select-then-insert anterior
+  // estourava a constraint como 500 em duplo clique.
   if (scope === "template") {
-    const existing = await db
-      .select({ id: budgetTemplates.id })
-      .from(budgetTemplates)
-      .where(
-        and(
-          eq(budgetTemplates.userId, userId),
-          eq(budgetTemplates.categoryId, categoryId),
-        ),
-      );
-    if (existing[0]) {
-      await db
-        .update(budgetTemplates)
-        .set({ limitAmount: limit, updatedAt: new Date() })
-        .where(
-          and(
-            eq(budgetTemplates.id, existing[0].id),
-            eq(budgetTemplates.userId, userId),
-          ),
-        );
-      revalidatePath("/orcamento");
-      return { ok: true, data: { id: existing[0].id } };
-    }
     const [row] = await db
       .insert(budgetTemplates)
       .values({ userId, categoryId, limitAmount: limit })
+      .onConflictDoUpdate({
+        target: [budgetTemplates.userId, budgetTemplates.categoryId],
+        set: { limitAmount: limit, updatedAt: new Date() },
+      })
       .returning({ id: budgetTemplates.id });
     revalidatePath("/orcamento");
     return { ok: true, data: { id: row.id } };
   }
 
   // scope === "month" — override
-  const existing = await db
-    .select({ id: budgets.id })
-    .from(budgets)
-    .where(
-      and(
-        eq(budgets.userId, userId),
-        eq(budgets.categoryId, categoryId),
-        eq(budgets.month, month!),
-      ),
-    );
-  if (existing[0]) {
-    await db
-      .update(budgets)
-      .set({ limitAmount: limit })
-      .where(and(eq(budgets.id, existing[0].id), eq(budgets.userId, userId)));
-    revalidatePath("/orcamento");
-    return { ok: true, data: { id: existing[0].id } };
-  }
   const [row] = await db
     .insert(budgets)
     .values({ userId, categoryId, month: month!, limitAmount: limit })
+    .onConflictDoUpdate({
+      target: [budgets.userId, budgets.categoryId, budgets.month],
+      set: { limitAmount: limit },
+    })
     .returning({ id: budgets.id });
   revalidatePath("/orcamento");
   return { ok: true, data: { id: row.id } };

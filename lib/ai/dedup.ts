@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { aiRuns } from "@/lib/db/schema";
 
 // Parte pura (hash + JSON canônico) vive em dedup-core.ts — testável sem DB.
-export { canonicalJson, hashInput } from "@/lib/ai/dedup-core";
+export { canonicalJson, hashInput, hashInputVersioned } from "@/lib/ai/dedup-core";
 
 /**
  * Helper compartilhado pra dedup de chamadas IA via `ai_run`.
