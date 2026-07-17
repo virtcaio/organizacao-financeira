@@ -33,22 +33,23 @@ Versão pública do plano. Para detalhes técnicos, histórico de decisões e co
 - **Gestão de categorias** — categorias custom + arquivar seeds
 
 ### Qualidade
-- Suite E2E Playwright (smoke, categorias, regras, conciliação, filtros)
+- Suite E2E Playwright (smoke, categorias, regras, conciliação, filtros) **rodando no CI** com Postgres dedicado
 - Testes unitários (vitest) de dinheiro, datas/timezone, parser OFX e regras de categorização
 - Style guide vivo de UX/UI + tokens semânticos de cor income/expense
+- Rate limiting nos endpoints sensíveis, security headers, error boundaries e política de senha
 
 ## 🚧 Now (próximas iterações)
 
-- **Alertas in-app (sino)** — persistir estouro de orçamento e recorrências próximas na tabela `alert` (já existe no schema); fecha o loop das features entregues.
-- **Cartão de crédito** — fechamento e vencimento, visão de fatura, parcelamento (`installment_*` já flui do import até o banco).
-- **Importação de CSV** — reusa o fluxo OFX + categorização IA (o hub já promete na UI).
+- **Alertas in-app (sino)** ([#55](https://github.com/virtcaio/organizacao-financeira/issues/55)) — persistir estouro de orçamento e recorrências próximas na tabela `alert` (já existe no schema); fecha o loop das features entregues.
+- **Cartão de crédito** ([#7](https://github.com/virtcaio/organizacao-financeira/issues/7)) — fechamento e vencimento, visão de fatura, parcelamento (`installment_*` já flui do import até o banco).
+- **Importação de CSV** ([#56](https://github.com/virtcaio/organizacao-financeira/issues/56)) — reusa o fluxo OFX + categorização IA (o hub já promete na UI).
 
 ## 🔜 Next
 
-- **Metas financeiras** (alvo, prazo, conta destino, progresso).
-- **IA de insights** — painel com análise mensal automática (infra pronta: BYOK server-side, prompt caching, dedup, agregações).
-- **Painel de custo de IA** — tokens por chamada já são gravados em `ai_run`; falta a superfície em /configuracoes.
-- **Hardening pré-divulgação** — rate limiting, security headers, error boundaries, export/delete de dados (LGPD).
+- **Metas financeiras** ([#57](https://github.com/virtcaio/organizacao-financeira/issues/57)) — alvo, prazo, conta destino, progresso.
+- **IA de insights** ([#58](https://github.com/virtcaio/organizacao-financeira/issues/58)) — painel com análise mensal automática (infra pronta: BYOK server-side, prompt caching, dedup, agregações).
+- **Painel de custo de IA** ([#59](https://github.com/virtcaio/organizacao-financeira/issues/59)) — tokens por chamada já são gravados em `ai_run`; falta a superfície em /configuracoes.
+- **Hardening restante** ([#63](https://github.com/virtcaio/organizacao-financeira/issues/63)) — CSP com nonce, validação de Origin, magic bytes no upload (rate limiting, headers e error boundaries já entregues).
 
 ## 🔭 Later
 
@@ -56,7 +57,7 @@ Versão pública do plano. Para detalhes técnicos, histórico de decisões e co
 - **Cotações automáticas** via Vercel Cron (AwesomeAPI, brapi.dev, CoinGecko).
 - **Projeções e simulações de cenário** com IA.
 - **Relatórios** mensais e anuais com exportação CSV/PDF.
-- **Exportação completa** dos dados (JSON + CSV em ZIP) e botão "deletar minha conta".
+- **Exportação completa + deletar conta (LGPD)** ([#60](https://github.com/virtcaio/organizacao-financeira/issues/60)) — dump JSON/CSV em ZIP e exclusão com dump prévio.
 
 ## ❓ Maybe / V2
 
