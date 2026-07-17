@@ -7,6 +7,7 @@ import { recurringRules, financialAccounts } from "@/lib/db/schema";
 import { requireUserId } from "@/lib/auth-helpers";
 import { recurringRuleInputSchema } from "@/types/recurring";
 import { listRecurringRulesForUser } from "@/lib/db/queries/recurring";
+import { categoryIsAccessible } from "@/lib/db/queries/categories";
 
 export type ActionResult<T = void> =
   | { ok: true; data: T }
@@ -58,6 +59,10 @@ export async function createRecurringRuleAction(
     return { ok: false, error: "Conta não encontrada" };
   }
 
+  if (d.categoryId && !(await categoryIsAccessible(userId, d.categoryId))) {
+    return { ok: false, error: "Categoria não encontrada" };
+  }
+
   const [row] = await db
     .insert(recurringRules)
     .values({
@@ -95,6 +100,25 @@ export async function updateRecurringRuleAction(
     };
   }
   const d = parsed.data;
+
+  // Mesma defense-in-depth do create: conta e categoria precisam ser do usuário.
+  const [account] = await db
+    .select({ id: financialAccounts.id })
+    .from(financialAccounts)
+    .where(
+      and(
+        eq(financialAccounts.id, d.financialAccountId),
+        eq(financialAccounts.userId, userId),
+      ),
+    )
+    .limit(1);
+  if (!account) {
+    return { ok: false, error: "Conta não encontrada" };
+  }
+
+  if (d.categoryId && !(await categoryIsAccessible(userId, d.categoryId))) {
+    return { ok: false, error: "Categoria não encontrada" };
+  }
 
   const result = await db
     .update(recurringRules)

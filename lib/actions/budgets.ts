@@ -11,6 +11,7 @@ import {
   getMonthlyBudgetSummary,
   findBudgetOverlap,
 } from "@/lib/db/queries/budgets";
+import { categoryIsAccessible } from "@/lib/db/queries/categories";
 
 export type ActionResult<T = void> =
   | { ok: true; data: T }
@@ -48,6 +49,14 @@ export async function upsertBudgetAction(
   }
 
   const { categoryId, limit, scope, month } = parsed.data;
+
+  if (!(await categoryIsAccessible(userId, categoryId))) {
+    return {
+      ok: false,
+      error: "Categoria não encontrada",
+      fieldErrors: { categoryId: "Categoria inválida" },
+    };
+  }
 
   const overlap = await findBudgetOverlap(
     userId,

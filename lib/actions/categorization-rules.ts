@@ -1,9 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, eq, isNull, or } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { categories, categorizationRules } from "@/lib/db/schema";
+import { categorizationRules } from "@/lib/db/schema";
 import { requireUserId } from "@/lib/auth-helpers";
 import {
   ruleCreateSchema,
@@ -12,6 +12,7 @@ import {
   type RuleUpdateInput,
 } from "@/types/categorization-rule";
 import { incrementHitCounts } from "@/lib/db/queries/categorization-rules";
+import { categoryIsAccessible } from "@/lib/db/queries/categories";
 
 export type ActionResult<T = void> =
   | { ok: true; data: T }
@@ -28,21 +29,6 @@ function collectFieldErrors(
     }
   }
   return fieldErrors;
-}
-
-/** Categoria existe e é acessível pro user (seed ou própria)? */
-async function categoryIsAccessible(userId: string, categoryId: string): Promise<boolean> {
-  const [row] = await db
-    .select({ id: categories.id })
-    .from(categories)
-    .where(
-      and(
-        eq(categories.id, categoryId),
-        or(isNull(categories.userId), eq(categories.userId, userId)),
-      ),
-    )
-    .limit(1);
-  return !!row;
 }
 
 async function loadOwnRule(userId: string, id: string) {
