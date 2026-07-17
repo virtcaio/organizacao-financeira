@@ -60,3 +60,11 @@ export function monthStartIsoBack(monthsBack: number, at: Date = new Date()): st
   }
   return `${targetYear}-${String(targetMonth).padStart(2, "0")}-01`;
 }
+
+/** Soma `days` dias a uma data ISO YYYY-MM-DD (aritmética UTC pura). */
+export function addDaysIso(iso: string, days: number): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + days);
+  return dt.toISOString().slice(0, 10);
+}

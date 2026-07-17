@@ -26,6 +26,23 @@ function collectFieldErrors(
   return fieldErrors;
 }
 
+/**
+ * Materializa a âncora do dia pra monthly/yearly quando o usuário não informa:
+ * sem isso, `nextRunDate` usa o dia corrente já clampado e uma regra iniciada
+ * em 31/01 "drifta" pra 28 permanentemente após fevereiro.
+ */
+function resolveDayOfMonth(
+  frequency: string,
+  dayOfMonth: number | null | undefined,
+  startDate: string,
+): number | null {
+  if (dayOfMonth) return dayOfMonth;
+  if (frequency === "monthly" || frequency === "yearly") {
+    return Number(startDate.slice(8, 10));
+  }
+  return null;
+}
+
 export async function listRecurringRulesAction() {
   const userId = await requireUserId();
   return listRecurringRulesForUser(userId);
@@ -75,7 +92,7 @@ export async function createRecurringRuleAction(
       description: d.description,
       frequency: d.frequency,
       interval: d.interval,
-      dayOfMonth: d.dayOfMonth ?? null,
+      dayOfMonth: resolveDayOfMonth(d.frequency, d.dayOfMonth, d.startDate),
       nextRunAt: d.startDate,
       endDate: d.endDate ?? null,
     })
@@ -131,7 +148,7 @@ export async function updateRecurringRuleAction(
       description: d.description,
       frequency: d.frequency,
       interval: d.interval,
-      dayOfMonth: d.dayOfMonth ?? null,
+      dayOfMonth: resolveDayOfMonth(d.frequency, d.dayOfMonth, d.startDate),
       nextRunAt: d.startDate,
       endDate: d.endDate ?? null,
     })
