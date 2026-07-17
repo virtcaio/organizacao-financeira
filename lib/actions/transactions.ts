@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, exists, gte, ilike, inArray, lte, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   transactions,
@@ -87,32 +87,107 @@ export type TransactionListItem = {
   tags: Tag[];
 };
 
-export async function listTransactionsAction(): Promise<TransactionListItem[]> {
+export type TransactionListFilters = {
+  from?: string; // YYYY-MM-DD inclusivo
+  to?: string; // YYYY-MM-DD inclusivo
+  accountId?: string;
+  /** Categorias já expandidas (mãe + filhas) — ver expandCategoryFilter. */
+  categoryIds?: string[];
+  q?: string;
+  tagId?: string;
+};
+
+export type TransactionListPage = {
+  rows: TransactionListItem[];
+  /** Linhas-par de transferências fora da página (pra montar o draft de edição). */
+  pairs: { id: string; accountId: string; amount: string }[];
+  /** Total de linhas com os filtros aplicados. */
+  totalFiltered: number;
+  /** Total de linhas do usuário sem filtro (distingue "sem transações" de "filtro vazio"). */
+  totalAll: number;
+};
+
+const LIKE_ESCAPE = /[%_\\]/g;
+
+export async function listTransactionsAction(opts?: {
+  filters?: TransactionListFilters;
+  page?: number;
+  pageSize?: number;
+}): Promise<TransactionListPage> {
   const userId = await requireUserId();
   const parentCategory = categories;
-  const rows = await db
-    .select({
-      id: transactions.id,
-      type: transactions.type,
-      amount: transactions.amount,
-      currency: transactions.currency,
-      date: transactions.date,
-      description: transactions.description,
-      notes: transactions.notes,
-      accountId: transactions.financialAccountId,
-      accountName: financialAccounts.name,
-      categoryId: transactions.categoryId,
-      categoryName: parentCategory.name,
-      categoryParentId: parentCategory.parentId,
-      transferPairId: transactions.transferPairId,
-      source: transactions.source,
-      sourceRef: transactions.sourceRef,
-    })
-    .from(transactions)
-    .innerJoin(financialAccounts, eq(financialAccounts.id, transactions.financialAccountId))
-    .leftJoin(parentCategory, eq(parentCategory.id, transactions.categoryId))
-    .where(eq(transactions.userId, userId))
-    .orderBy(desc(transactions.date), desc(transactions.createdAt));
+  const f = opts?.filters ?? {};
+  const pageSize = Math.min(Math.max(opts?.pageSize ?? 50, 1), 200);
+  const page = Math.max(opts?.page ?? 1, 1);
+
+  // Filtros no WHERE — os índices tx_user_date/account/category já existem;
+  // filtrar em JS pós-fetch carregava a tabela inteira do usuário por visita.
+  const conds = [eq(transactions.userId, userId)];
+  if (f.from) conds.push(gte(transactions.date, f.from));
+  if (f.to) conds.push(lte(transactions.date, f.to));
+  if (f.accountId) conds.push(eq(transactions.financialAccountId, f.accountId));
+  if (f.categoryIds && f.categoryIds.length > 0) {
+    conds.push(inArray(transactions.categoryId, f.categoryIds));
+  }
+  if (f.q) {
+    const escaped = f.q.replace(LIKE_ESCAPE, (c) => `\\${c}`);
+    conds.push(ilike(transactions.description, `%${escaped}%`));
+  }
+  if (f.tagId) {
+    conds.push(
+      exists(
+        db
+          .select({ one: sql`1` })
+          .from(transactionTags)
+          .where(
+            and(
+              eq(transactionTags.transactionId, transactions.id),
+              eq(transactionTags.tagId, f.tagId),
+            ),
+          ),
+      ),
+    );
+  }
+  const where = and(...conds);
+
+  const [rows, [filteredCount], [allCount]] = await Promise.all([
+    db
+      .select({
+        id: transactions.id,
+        type: transactions.type,
+        amount: transactions.amount,
+        currency: transactions.currency,
+        date: transactions.date,
+        description: transactions.description,
+        notes: transactions.notes,
+        accountId: transactions.financialAccountId,
+        accountName: financialAccounts.name,
+        categoryId: transactions.categoryId,
+        categoryName: parentCategory.name,
+        categoryParentId: parentCategory.parentId,
+        transferPairId: transactions.transferPairId,
+        source: transactions.source,
+        sourceRef: transactions.sourceRef,
+      })
+      .from(transactions)
+      .innerJoin(
+        financialAccounts,
+        eq(financialAccounts.id, transactions.financialAccountId),
+      )
+      .leftJoin(parentCategory, eq(parentCategory.id, transactions.categoryId))
+      .where(where)
+      .orderBy(desc(transactions.date), desc(transactions.createdAt))
+      .limit(pageSize)
+      .offset((page - 1) * pageSize),
+    db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(transactions)
+      .where(where),
+    db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(transactions)
+      .where(eq(transactions.userId, userId)),
+  ]);
 
   // Resolve parent category name in JS to keep the SQL one join lighter.
   const parentIds = Array.from(
@@ -122,7 +197,7 @@ export async function listTransactionsAction(): Promise<TransactionListItem[]> {
     ? await db
         .select({ id: categories.id, name: categories.name })
         .from(categories)
-        .where(eq(categories.archived, false))
+        .where(inArray(categories.id, parentIds))
     : [];
   const parentNameById = new Map(parents.map((p) => [p.id, p.name]));
 
@@ -131,27 +206,54 @@ export async function listTransactionsAction(): Promise<TransactionListItem[]> {
     rows.map((r) => r.id),
   );
 
-  return rows.map((r) => ({
-    id: r.id,
-    type: r.type,
-    amount: r.amount,
-    currency: r.currency,
-    date: r.date,
-    description: r.description,
-    notes: r.notes,
-    accountId: r.accountId,
-    accountName: r.accountName,
-    categoryId: r.categoryId,
-    categoryName: r.categoryName,
-    categoryParentName: r.categoryParentId
-      ? parentNameById.get(r.categoryParentId) ?? null
-      : null,
-    transferPairId: r.transferPairId,
-    // sourceRef é dual-purpose: key de foto OU id externo (FITID/fingerprint).
-    // Só é comprovante quando a origem é foto.
-    receiptKey: r.source === "photo" ? r.sourceRef : null,
-    tags: tagsByTx.get(r.id) ?? [],
-  }));
+  // Linhas-par de transferências que caíram fora da página — só o necessário
+  // pra buildTransferDraft (conta + valor da outra perna).
+  const idsInPage = new Set(rows.map((r) => r.id));
+  const missingPairIds = rows
+    .map((r) => r.transferPairId)
+    .filter((v): v is string => !!v && !idsInPage.has(v));
+  const pairs = missingPairIds.length
+    ? await db
+        .select({
+          id: transactions.id,
+          accountId: transactions.financialAccountId,
+          amount: transactions.amount,
+        })
+        .from(transactions)
+        .where(
+          and(
+            eq(transactions.userId, userId),
+            inArray(transactions.id, missingPairIds),
+          ),
+        )
+    : [];
+
+  return {
+    rows: rows.map((r) => ({
+      id: r.id,
+      type: r.type,
+      amount: r.amount,
+      currency: r.currency,
+      date: r.date,
+      description: r.description,
+      notes: r.notes,
+      accountId: r.accountId,
+      accountName: r.accountName,
+      categoryId: r.categoryId,
+      categoryName: r.categoryName,
+      categoryParentName: r.categoryParentId
+        ? parentNameById.get(r.categoryParentId) ?? null
+        : null,
+      transferPairId: r.transferPairId,
+      // sourceRef é dual-purpose: key de foto OU id externo (FITID/fingerprint).
+      // Só é comprovante quando a origem é foto.
+      receiptKey: r.source === "photo" ? r.sourceRef : null,
+      tags: tagsByTx.get(r.id) ?? [],
+    })),
+    pairs,
+    totalFiltered: filteredCount?.n ?? 0,
+    totalAll: allCount?.n ?? 0,
+  };
 }
 
 export async function createTransactionAction(

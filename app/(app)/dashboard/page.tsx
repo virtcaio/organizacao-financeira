@@ -2,8 +2,10 @@ import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { KpiCards } from "@/components/dashboard/kpi-cards";
-import { CategoryBreakdown } from "@/components/dashboard/category-breakdown";
-import { MonthlyEvolution } from "@/components/dashboard/monthly-evolution";
+import {
+  CategoryBreakdownLazy,
+  MonthlyEvolutionLazy,
+} from "@/components/dashboard/lazy-charts";
 import { RecentTransactions } from "@/components/dashboard/recent-transactions";
 import { UpcomingRecurring } from "@/components/dashboard/upcoming-recurring";
 import {
@@ -56,8 +58,8 @@ export default async function DashboardPage() {
       <KpiCards balances={balances} kpis={kpis} now={now} />
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <CategoryBreakdown items={breakdown} />
-        <MonthlyEvolution data={evolution} />
+        <CategoryBreakdownLazy items={breakdown} />
+        <MonthlyEvolutionLazy data={evolution} />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">

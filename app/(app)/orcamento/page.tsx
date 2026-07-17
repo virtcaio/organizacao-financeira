@@ -1,6 +1,6 @@
 import { requireUserId } from "@/lib/auth-helpers";
 import { listCategoriesForUser } from "@/lib/db/queries/categories";
-import { getBudgetsForMonth, getMonthlyBudgetSummary } from "@/lib/db/queries/budgets";
+import { getBudgetsForMonth, summarizeBudgets } from "@/lib/db/queries/budgets";
 import { monthStartIso } from "@/lib/date";
 import { formatCurrency } from "@/lib/format";
 import {
@@ -45,11 +45,13 @@ export default async function OrcamentoPage({
     params.month && MONTH_RE.test(params.month) ? params.month : monthStartIso();
   const label = monthLabel(month);
 
-  const [rows, summary, categories] = await Promise.all([
+  const [rows, categories] = await Promise.all([
     getBudgetsForMonth(userId, month),
-    getMonthlyBudgetSummary(userId, month),
     listCategoriesForUser(userId),
   ]);
+  // Reduce puro sobre as linhas já carregadas — chamar getMonthlyBudgetSummary
+  // aqui rodava o pipeline inteiro (com as queries de spent) uma segunda vez.
+  const summary = summarizeBudgets(rows);
 
   return (
     <div className="space-y-6">

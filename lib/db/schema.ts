@@ -273,7 +273,12 @@ export const transactionTags = pgTable(
       .notNull()
       .references(() => tags.id, { onDelete: "cascade" }),
   },
-  (t) => [primaryKey({ columns: [t.transactionId, t.tagId] })],
+  (t) => [
+    primaryKey({ columns: [t.transactionId, t.tagId] }),
+    // A PK começa por transaction_id — sem este índice, o CASCADE de excluir
+    // uma tag (e o filtro ?tag=) varre a tabela inteira por tag_id.
+    index("transaction_tag_tag_idx").on(t.tagId),
+  ],
 );
 
 export const recurringRules = pgTable(
@@ -345,7 +350,10 @@ export const budgets = pgTable(
     limitAmount: numeric("limit_amount", { precision: 14, scale: 2 }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [uniqueIndex("budget_user_cat_month_uq").on(t.userId, t.categoryId, t.month)],
+  (t) => [
+    uniqueIndex("budget_user_cat_month_uq").on(t.userId, t.categoryId, t.month),
+    index("budget_user_month_idx").on(t.userId, t.month),
+  ],
 );
 
 // Orçamento padrão recorrente: vale pra todo mês, salvo override em `budget`.
