@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ArrowRightIcon } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { amountDisplay, formatCurrency, formatDate } from "@/lib/format";
 import type { RecentTransaction } from "@/lib/db/queries/dashboard";
 
 export function RecentTransactions({ transactions }: { transactions: RecentTransaction[] }) {
@@ -26,20 +26,8 @@ export function RecentTransactions({ transactions }: { transactions: RecentTrans
           <ul className="divide-y">
             {transactions.map((t) => {
               const isTransfer = t.type === "transfer";
-              const isIncome = t.type === "income";
               const amountNum = Number(t.amount);
-              const valueClass = isTransfer
-                ? "text-transfer"
-                : isIncome
-                  ? "text-income"
-                  : "text-expense";
-              const sign = isTransfer
-                ? amountNum < 0
-                  ? "− "
-                  : "+ "
-                : isIncome
-                  ? "+ "
-                  : "− ";
+              const { sign, valueClass } = amountDisplay(t.type, amountNum);
               return (
                 <li key={t.id} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
                   <div className="min-w-0">

@@ -2,6 +2,7 @@ import "server-only";
 import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { categories, financialAccounts, transactions } from "@/lib/db/schema";
+import { signedSumExpr } from "@/lib/db/queries/accounts";
 import { monthEndIso, monthStartIso, monthStartIsoBack } from "@/lib/date";
 
 export type CurrencyBalance = {
@@ -11,7 +12,11 @@ export type CurrencyBalance = {
   expense: number;
 };
 
-/** Saldo total por moeda: opening_balance + sum(income) - sum(expense). All-time. */
+/**
+ * Saldo total por moeda: opening_balance + soma com sinal (income − expense +
+ * adjustment + transfer; investment ignorado). All-time, só contas não-arquivadas —
+ * mesma convenção de `listAccountsWithBalance`, pra dashboard e /contas nunca divergirem.
+ */
 export async function getBalancesByCurrency(userId: string): Promise<CurrencyBalance[]> {
   const openings = await db
     .select({
@@ -29,9 +34,16 @@ export async function getBalancesByCurrency(userId: string): Promise<CurrencyBal
       currency: transactions.currency,
       type: transactions.type,
       total: sql<string>`coalesce(sum(${transactions.amount}), 0)`,
+      signed: signedSumExpr,
     })
     .from(transactions)
-    .where(eq(transactions.userId, userId))
+    .innerJoin(
+      financialAccounts,
+      eq(financialAccounts.id, transactions.financialAccountId),
+    )
+    .where(
+      and(eq(transactions.userId, userId), eq(financialAccounts.archived, false)),
+    )
     .groupBy(transactions.currency, transactions.type);
 
   const map = new Map<string, CurrencyBalance>();
@@ -47,14 +59,9 @@ export async function getBalancesByCurrency(userId: string): Promise<CurrencyBal
     const entry =
       map.get(t.currency) ??
       ({ currency: t.currency, total: 0, income: 0, expense: 0 } as CurrencyBalance);
-    const v = Number(t.total);
-    if (t.type === "income") {
-      entry.income += v;
-      entry.total += v;
-    } else if (t.type === "expense") {
-      entry.expense += v;
-      entry.total -= v;
-    }
+    entry.total += Number(t.signed);
+    if (t.type === "income") entry.income += Number(t.total);
+    else if (t.type === "expense") entry.expense += Number(t.total);
     map.set(t.currency, entry);
   }
   return Array.from(map.values()).sort((a, b) => {
