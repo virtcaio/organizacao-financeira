@@ -11,9 +11,9 @@ Mestre de fases e acompanhamento. Spec em [`PRD.md`](./PRD.md), convenções em 
 | Fase | Foco | Status |
 |---|---|---|
 | V0 | Fundação: scaffold, DB, Auth | ✅ |
-| V1 | MVP do encontro: CRUD + dashboard + orçamento + recorrências + tags + deploy preview | ◐ |
-| V1.1 | Inputs com IA + conciliação | ☐ |
-| V1.2 | Cartão + Metas + Alertas + Aprendizado da IA | ☐ |
+| V1 | MVP do encontro: CRUD + dashboard + orçamento + recorrências + tags + deploy preview | ✅ |
+| V1.1 | Inputs com IA + conciliação | ✅ (CSV pendente — OFX entregue no lugar) |
+| V1.2 | Cartão + Metas + Alertas + Aprendizado da IA | ◐ (aprendizado ✅) |
 | V1.3 | Investimentos + cotações automáticas | ☐ |
 | V1.4 | IA de insights + projeções | ☐ |
 | V1.5 | Relatórios + Export | ☐ |
@@ -56,7 +56,7 @@ Mestre de fases e acompanhamento. Spec em [`PRD.md`](./PRD.md), convenções em 
 
 ---
 
-## V1 — MVP do encontro ◐
+## V1 — MVP do encontro ✅
 
 **Sub-fases de execução (ordem recomendada):**
 
@@ -109,10 +109,10 @@ Mestre de fases e acompanhamento. Spec em [`PRD.md`](./PRD.md), convenções em 
 - [x] Seed de 10 transações reais (maio + abril 2026) pro usuário demo pra demonstração
 - [x] Saldo consolidado por moeda · Receitas vs despesas do mês · Gráfico de gastos por categoria · Evolução mensal 6m · Estado vazio com CTAs
 
-**Pendente em V1 (decidido adiar pra finalizar V1.1 antes):**
-- [ ] V1c — Tags + transferências + filtros na listagem de transações
-- [ ] V1f — Orçamento mensal por categoria (limite, progresso, alerta 80%/100%)
-- [ ] V1g — Recorrências (regra + Vercel Cron) e "próximas contas a vencer" no dashboard
+**Fechado depois da V1.1 (sprint mai→jul/2026):**
+- [x] V1c — Tags (#21) + transferências (#22) + filtros completos na listagem com paginação (#39, #49)
+- [x] V1f — Orçamento mensal por categoria: template recorrente + override mensal, barra de progresso ok/warning/exceeded (#19, #24). Alerta persistido (sino) segue pendente em V1.2 — hoje o estado é só visual, threshold 70%.
+- [x] V1g — Recorrências (regra + Vercel Cron diário com catch-up) + widget "próximas recorrências" no dashboard (#26)
 
 **V1i — Deploy Vercel ✅**
 - [x] Repositório privado em `github.com/virtcaio/organizacao-financeira`
@@ -125,7 +125,7 @@ Mestre de fases e acompanhamento. Spec em [`PRD.md`](./PRD.md), convenções em 
 
 ---
 
-## V1.1 — Inputs com IA + conciliação ◐
+## V1.1 — Inputs com IA + conciliação ✅ (exceto CSV)
 
 **Objetivo:** reduzir atrito de lançamento a quase zero usando IA do próprio usuário (BYOK).
 
@@ -153,17 +153,17 @@ Mestre de fases e acompanhamento. Spec em [`PRD.md`](./PRD.md), convenções em 
 - [x] Smoke test Playwright (`tests/smoke.spec.ts`) — cadastro → dashboard → guards → form BYOK → validação chave inválida → 401 nos endpoints sem auth. Passa em ~12s.
 - [x] **Validado em produção:** 8 transações importadas de PDF real (R$ 586,59) em ambiente do mantenedor.
 
-### V1.1b — Resto da V1.1 (pendente)
-- [ ] Importação de CSV (parser por banco — começar pelo banco principal do usuário)
-- [ ] OCR de comprovante: upload de foto pro Supabase Storage (privado, signed URL) → Claude Vision → pré-preenche formulário
-- [ ] Tabela `ai_run` registrando hash do input + output pra dedup (mesma foto/PDF reenviado reusa parse)
-- [ ] Conciliação de saldo: botão "ajustar saldo" em cada conta → transação `type=adjustment` com motivo
+### V1.1b — Resto da V1.1 ✅ (exceto CSV)
+- [x] **Importação OFX no lugar do CSV** (#31): parser SGML/XML próprio (`lib/ofx/parse.ts`), detecção de encoding latin-1/windows-1252, hub `/importar` com abas PDF/OFX, dedup por FITID. CSV segue pendente — reusa este fluxo quando vier (o pipeline de categorização IA já é genérico).
+- [x] OCR de comprovante (#28, #29): foto → Supabase Storage privado (signed URL TTL 5min) → Claude Vision → despesa pré-preenchida; comprovante anexado à transação (clipe na listagem)
+- [x] Tabela `ai_run` com dedup por hash em import-pdf, OCR e categorize-imported (#43)
+- [x] Conciliação de saldo (#41): dialog "ajustar saldo" → transação `type=adjustment` + coluna de saldo atual em /contas
 
 **Critério de aceite:** importo uma fatura PDF, reviso linha a linha, salvo todas. Tiro foto de uma nota fiscal, o app extrai valor/data/local e sugere categoria. Ajusto saldo da conta corrente pra bater com o app do banco.
 
 ---
 
-## V1.2 — Cartão + Metas + Alertas + Aprendizado ☐
+## V1.2 — Cartão + Metas + Alertas + Aprendizado ◐
 
 **Objetivo:** cobrir o ciclo completo de compromissos financeiros.
 
@@ -174,7 +174,7 @@ Mestre de fases e acompanhamento. Spec em [`PRD.md`](./PRD.md), convenções em 
 - [ ] Pagamento de fatura: gera transferência da conta corrente → cartão
 - [ ] Metas financeiras: criar (alvo, prazo, conta destino); aporte manual; barra de progresso; alerta quando atingida
 - [ ] Alertas in-app (sino no header): orçamento estourado (80%/100%), conta a vencer, fatura fechou, meta atingida
-- [ ] Aprendizado de categorização: ao corrigir sugestão da IA, salvar `categorization_rule` (pattern → categoria); aplicar antes da IA nas próximas importações; tela pra listar/editar regras
+- [x] Aprendizado de categorização (#37): regra `categorization_rule` (pattern → categoria) criada a partir de correções (nos fluxos PDF/OFX e manual), aplicada como pre-pass antes da IA, gestão em /configuracoes com priority e hit count
 
 **Critério de aceite:** parcelo uma compra de R$ 1.200 em 4x, vejo 4 transações futuras, fatura mostra o valor certo. Corrijo "iFood" pra Alimentação > Restaurantes uma vez, próxima importação já vem certo sem mexer no Claude.
 
@@ -259,3 +259,6 @@ Adiado pra depois do MVP estabilizado:
 - **2026-05-19 noite — bulk via route handler:** Server Action de salvar em lote dava `Failed to fetch` no Next 16; migrei pra `/api/transactions/bulk`. Padrão a seguir pra novas operações: route handler > Server Action quando o body é grande ou a operação não é trivial.
 - **2026-05-19 noite — Playwright instalado:** `pnpm exec playwright test` cobre smoke do fluxo de cadastro + auth + guards de IA. Próximos testes adicionados conforme a feature.
 - **2026-05-19 noite — Deploy Vercel:** repo `virtcaio/organizacao-financeira` privado no GitHub, projeto importado na Vercel via dashboard, auto-deploy ativo. Build de produção exigiu Suspense em volta de `useSearchParams` (LoginForm) — fix commitado.
+- **2026-05-20 — Auditoria completa (14 relatórios):** snapshot em `docs/internal/` cobrindo UX, segurança, performance, LGPD, DR etc. Orientou o sprint seguinte.
+- **mai→jul/2026 — Sprint de features (PRs #12–#43):** style guide + tokens de cor (#12–#16), timezone-safe date helpers (#17), orçamento (#19, #24), tags (#21), transferências (#22), recorrências + cron (#26), OCR de comprovante (#28, #29), importação OFX + hub (#31), categorias custom (#33), aprendizado de categorização (#37), filtros (#39), conciliação (#41), dedup `ai_run` (#43). **OFX entrou no lugar do CSV** — formato mais estruturado, exportado por praticamente todo banco BR; CSV vira reuso do mesmo fluxo depois.
+- **2026-07-17 — Varredura de qualidade + PRs de correção (#45–#51):** nova auditoria (`docs/internal/15-varredura-2026-07-17.md`, 6 agentes: bugs/segurança/perf/UX/testes/produto) seguida de: saldo do dashboard consistente com /contas (#45), ownership de categoria/conta em todas as mutações (#46), dedup atômico de importação + fingerprint no PDF + parser de valor com milhar (#47), recorrências timezone/drift/concorrência (#48), perf (N+1 do orçamento, filtros em SQL + paginação, índices, Recharts lazy) (#49), setup vitest + 59 unit tests (#50), batch de consistência UX (#51). Convenção nova: `*.test.ts` = vitest, `*.spec.ts` = Playwright.
