@@ -10,7 +10,7 @@ import {
   reconcileAccountSchema,
   type ReconcileAccountInput,
 } from "@/types/financial-account";
-import { computeAccountBalance } from "@/lib/db/queries/accounts";
+import { signedSumExpr } from "@/lib/db/queries/accounts";
 
 export type ActionResult<T = void> =
   | { ok: true; data: T }
@@ -130,31 +130,55 @@ export async function reconcileAccountAction(
   }
 
   const { accountId, realBalance, date } = parsed.data;
-
-  const current = await computeAccountBalance(userId, accountId);
-  if (!current) return { ok: false, error: "Conta não encontrada" };
-
   const real = Number(realBalance);
-  const delta = Number((real - current.balance).toFixed(2));
 
-  if (Math.abs(delta) < 0.005) {
-    return { ok: true, data: { delta: 0 } };
-  }
+  // Ler saldo e inserir o ajuste na MESMA transação, com lock na conta:
+  // dois submits concorrentes leriam o mesmo saldo e dobrariam o ajuste.
+  const result = await db.transaction(async (tx) => {
+    const [acct] = await tx
+      .select({
+        openingBalance: financialAccounts.openingBalance,
+        currency: financialAccounts.currency,
+      })
+      .from(financialAccounts)
+      .where(
+        and(eq(financialAccounts.id, accountId), eq(financialAccounts.userId, userId)),
+      )
+      .for("update");
+    if (!acct) return null;
 
-  await db.insert(transactions).values({
-    userId,
-    financialAccountId: accountId,
-    categoryId: null,
-    type: "adjustment",
-    amount: delta.toFixed(2),
-    currency: current.currency,
-    date,
-    description: "Ajuste de saldo",
-    source: "manual",
+    const [agg] = await tx
+      .select({ total: signedSumExpr })
+      .from(transactions)
+      .where(
+        and(
+          eq(transactions.financialAccountId, accountId),
+          eq(transactions.userId, userId),
+        ),
+      );
+
+    const balance = Number(acct.openingBalance) + Number(agg?.total ?? 0);
+    const delta = Number((real - balance).toFixed(2));
+    if (Math.abs(delta) < 0.005) return { delta: 0 };
+
+    await tx.insert(transactions).values({
+      userId,
+      financialAccountId: accountId,
+      categoryId: null,
+      type: "adjustment",
+      amount: delta.toFixed(2),
+      currency: acct.currency,
+      date,
+      description: "Ajuste de saldo",
+      source: "manual",
+    });
+    return { delta };
   });
+
+  if (!result) return { ok: false, error: "Conta não encontrada" };
 
   revalidatePath("/contas");
   revalidatePath("/transacoes");
   revalidatePath("/dashboard");
-  return { ok: true, data: { delta } };
+  return { ok: true, data: result };
 }

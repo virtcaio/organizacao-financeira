@@ -48,10 +48,21 @@ export async function createTagAction(
     };
   }
 
+  // onConflictDoNothing: o pré-check acima é só pra mensagem amigável;
+  // a constraint segura o duplo clique concorrente sem estourar 500.
   const [row] = await db
     .insert(tags)
     .values({ userId, name, color: color ?? null })
+    .onConflictDoNothing()
     .returning({ id: tags.id, name: tags.name, color: tags.color });
+
+  if (!row) {
+    return {
+      ok: false,
+      error: "Já existe uma tag com esse nome",
+      fieldErrors: { name: "Nome já usado" },
+    };
+  }
 
   revalidatePath("/configuracoes");
   revalidatePath("/transacoes");

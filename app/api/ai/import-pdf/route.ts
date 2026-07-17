@@ -7,7 +7,7 @@ import {
   sanitizeForLog,
 } from "@/lib/ai/server";
 import { clientIpFromHeaders, rateLimit } from "@/lib/rate-limit";
-import { buildImportPdfSystemPrompt } from "@/lib/ai/prompts/import-pdf";
+import { buildImportPdfSystemPrompt, PROMPT_VERSION } from "@/lib/ai/prompts/import-pdf";
 import {
   importPdfOutputSchema,
   type ImportPdfOutput,
@@ -18,7 +18,7 @@ import {
   findFirstMatchingRule,
   type CategorizationRule,
 } from "@/lib/categorization/apply";
-import { findAiRunCache, hashInput, saveAiRun } from "@/lib/ai/dedup";
+import { findAiRunCache, hashInputVersioned, saveAiRun } from "@/lib/ai/dedup";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -94,7 +94,10 @@ export async function POST(req: Request) {
   // PDF → buffer (pra hash de dedup) + base64 (pro envio à IA)
   const arrayBuffer = await file.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
-  const inputHash = hashInput(buffer);
+  const inputHash = hashInputVersioned(
+    `categorize_pdf:v${PROMPT_VERSION}:${DEFAULT_MODEL}`,
+    buffer,
+  );
 
   // Catálogo atual do usuário — usado no prompt e pra validar os
   // category_id devolvidos pela IA (ou pelo cache, que pode apontar pra

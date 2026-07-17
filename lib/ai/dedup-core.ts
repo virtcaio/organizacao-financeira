@@ -28,3 +28,18 @@ export function canonicalJson(value: unknown): string {
     .join(",");
   return `{${inner}}`;
 }
+
+/**
+ * Hash versionado: prefixa o payload com um contexto (kind + versão do
+ * prompt + modelo). Mudar o system prompt ou o modelo passa a invalidar o
+ * cache de `ai_run` — antes, o mesmo PDF devolvia pra sempre o output da
+ * primeira versão do prompt.
+ */
+export function hashInputVersioned(
+  context: string,
+  input: Buffer | string,
+): string {
+  const pre = Buffer.from(`${context}\n`, "utf8");
+  const data = typeof input === "string" ? Buffer.from(input, "utf8") : input;
+  return createHash("sha256").update(pre).update(data).digest("hex");
+}

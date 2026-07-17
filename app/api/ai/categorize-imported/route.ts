@@ -8,7 +8,7 @@ import {
   sanitizeForLog,
 } from "@/lib/ai/server";
 import { clientIpFromHeaders, rateLimit } from "@/lib/rate-limit";
-import { buildCategorizeImportedSystemPrompt } from "@/lib/ai/prompts/categorize-imported";
+import { buildCategorizeImportedSystemPrompt, PROMPT_VERSION } from "@/lib/ai/prompts/categorize-imported";
 import { categorizeImportedOutputSchema } from "@/lib/ai/types";
 import { listCategoriesForUser } from "@/lib/db/queries/categories";
 import { listRulesForApply } from "@/lib/db/queries/categorization-rules";
@@ -16,7 +16,7 @@ import { applyRulesToItems } from "@/lib/categorization/apply";
 import {
   canonicalJson,
   findAiRunCache,
-  hashInput,
+  hashInputVersioned,
   saveAiRun,
 } from "@/lib/ai/dedup";
 
@@ -143,7 +143,10 @@ export async function POST(req: Request) {
       type: u.type,
     }))
     .sort((a, b) => a.id.localeCompare(b.id));
-  const inputHash = hashInput(canonicalJson(cacheKeyItems));
+  const inputHash = hashInputVersioned(
+    `categorize_csv:v${PROMPT_VERSION}:${DEFAULT_MODEL}`,
+    canonicalJson(cacheKeyItems),
+  );
 
   const cached = await findAiRunCache(userId, "categorize_csv", inputHash);
   if (cached) {

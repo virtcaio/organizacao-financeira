@@ -7,13 +7,13 @@ import {
   sanitizeForLog,
 } from "@/lib/ai/server";
 import { clientIpFromHeaders, rateLimit } from "@/lib/rate-limit";
-import { buildOcrReceiptSystemPrompt } from "@/lib/ai/prompts/ocr-receipt";
+import { buildOcrReceiptSystemPrompt, PROMPT_VERSION } from "@/lib/ai/prompts/ocr-receipt";
 import { ocrReceiptOutputSchema, type OcrReceiptOutput } from "@/lib/ai/types";
 import { listRulesForApply } from "@/lib/db/queries/categorization-rules";
 import { findFirstMatchingRule } from "@/lib/categorization/apply";
 import { listCategoriesForUser } from "@/lib/db/queries/categories";
 import { uploadReceipt, signedReceiptUrl, ACCEPTED_IMAGE_TYPES } from "@/lib/storage";
-import { findAiRunCache, hashInput, saveAiRun } from "@/lib/ai/dedup";
+import { findAiRunCache, hashInputVersioned, saveAiRun } from "@/lib/ai/dedup";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -91,7 +91,10 @@ export async function POST(req: Request) {
 
   const arrayBuffer = await file.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
-  const inputHash = hashInput(buffer);
+  const inputHash = hashInputVersioned(
+    `ocr_receipt:v${PROMPT_VERSION}:${DEFAULT_MODEL}`,
+    buffer,
+  );
 
   // Sobe o comprovante no bucket privado (sempre — arquiva a foto).
   let receiptKey: string;
