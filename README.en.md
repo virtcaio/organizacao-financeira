@@ -1,3 +1,5 @@
+> **Project paused on 2026-11-03:** the code remains open and can be used; there is no active maintenance.
+
 # Organização Financeira
 
 > Personal & family finance manager with AI — imports PDF credit card invoices, categorizes them with Claude, **BYOK** (each user brings their own Anthropic key).

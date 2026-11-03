@@ -1,3 +1,5 @@
+> **Projeto pausado em 2026-11-03:** o código segue aberto e pode ser usado; não há manutenção ativa.
+
 # Organização Financeira
 
 > Gestor financeiro pessoal e familiar com IA — importa fatura PDF, categoriza com Claude, **BYOK** (cada usuário usa a própria chave da Anthropic).
